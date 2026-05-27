@@ -9,7 +9,7 @@ MenuMaster is a database-backed demo for restaurant QR ordering and POS workflow
 - Menu browsing with options, notes, cart, and out-of-stock state
 - Realtime-ready order board
 - Manual POS checkout for cash, card, or QR transfer
-- Menu admin with add/edit item, selectable image cards, and availability toggle
+- Menu admin with add/edit item, selectable/uploaded images, and availability toggle
 - Order history, payment history, and item sales summary
 - Supabase Postgres schema and seed data
 
@@ -40,16 +40,17 @@ If Supabase env vars are not configured, the app runs in local demo mode. Demo a
 
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the Supabase SQL editor.
-3. Create an auth user for admin login.
-4. Copy `.env.example` to `.env.local`.
-5. Fill:
+3. Run `supabase/storage.sql` in the Supabase SQL editor for the `menu-images` bucket.
+4. Create an auth user for admin login.
+5. Copy `.env.example` to `.env.local`.
+6. Fill:
 
 ```powershell
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
-6. Restart the dev server.
+7. Restart the dev server.
 
 The current RLS policies are intentionally demo-friendly. Before production, tighten customer order reads to table/session tokens and add real staff roles.
 

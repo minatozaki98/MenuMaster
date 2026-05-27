@@ -33,6 +33,7 @@ import {
   signOutAdmin,
   updateMenuAvailability,
   updateOrderStatus,
+  uploadMenuImage,
 } from "@/lib/store";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
 import type {
@@ -164,29 +165,49 @@ export function AdminDashboard() {
     const description = String(data.get("description"));
     const imageChoiceId = String(data.get("imageChoiceId") ?? "");
     const uploadedImageUrl = String(data.get("uploadedImageUrl") ?? "");
+    const uploadedImageFile = data.get("imageFile");
     const id = String(data.get("id") ?? "");
+    const nextId = id || crypto.randomUUID();
+    const imageFile =
+      uploadedImageFile instanceof File && uploadedImageFile.size > 0
+        ? uploadedImageFile
+        : undefined;
 
-    if (!name || !categoryId || !price || (!imageChoiceId && !uploadedImageUrl && !id)) {
+    if (
+      !name ||
+      !categoryId ||
+      !price ||
+      (!imageChoiceId && !uploadedImageUrl && !imageFile && !id)
+    ) {
       setError("Menu item name, category, price, and image are required.");
       return false;
     }
 
     setError("");
-    await saveMenuItem(
-      buildMenuItemFromAdminForm(state, {
-        id: id || undefined,
-        categoryId,
-        name,
-        price,
-        description,
-        imageChoiceId,
-        uploadedImageUrl,
-      }),
-    );
-    setEditingMenuItemId("");
-    form.reset();
-    await refresh();
-    return true;
+    try {
+      const imageUrl = imageFile
+        ? await uploadMenuImage(nextId, imageFile)
+        : uploadedImageUrl;
+
+      await saveMenuItem(
+        buildMenuItemFromAdminForm(state, {
+          id: nextId,
+          categoryId,
+          name,
+          price,
+          description,
+          imageChoiceId,
+          uploadedImageUrl: imageUrl,
+        }),
+      );
+      setEditingMenuItemId("");
+      form.reset();
+      await refresh();
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to save menu item.");
+      return false;
+    }
   }
 
   async function handleSignOut() {
@@ -664,6 +685,7 @@ function MenuPanel({
               <span className="mb-2 block text-sm font-semibold">Upload image</span>
               <input
                 type="file"
+                name="imageFile"
                 accept="image/*"
                 onChange={(event) => void handleImageUpload(event.target.files?.[0])}
                 className="block w-full text-sm text-slate-700 file:mr-3 file:h-10 file:rounded-lg file:border-0 file:bg-slate-950 file:px-3 file:text-sm file:font-semibold file:text-white"
@@ -682,7 +704,7 @@ function MenuPanel({
               <p className="mt-2 text-sm text-rose-700">{currentImageUploadError}</p>
             ) : (
               <p className="mt-2 text-xs text-slate-500">
-                Uploaded images are saved with the menu item in demo mode.
+                Uploaded images are stored in Supabase Storage when connected.
               </p>
             )}
           </div>

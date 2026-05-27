@@ -1,6 +1,7 @@
 "use client";
 
 import { DEMO_STATE_VERSION, demoState } from "./demo-data";
+import { buildMenuImagePath, getMenuImageBucket } from "./menu-image-upload";
 import {
   calculateOrderTotal,
   createOrderItemSnapshot,
@@ -398,6 +399,37 @@ export async function saveMenuItem(menuItem: MenuItem) {
     ? state.menuItems.map((item) => (item.id === menuItem.id ? menuItem : item))
     : [...state.menuItems, menuItem];
   saveLocalState(state);
+}
+
+export async function uploadMenuImage(menuItemId: string, file: File) {
+  const supabase = createBrowserSupabaseClient();
+  if (!supabase) {
+    return readFileAsDataUrl(file);
+  }
+
+  const path = buildMenuImagePath(menuItemId, file, crypto.randomUUID());
+  const { error } = await supabase.storage
+    .from(getMenuImageBucket())
+    .upload(path, file, {
+      cacheControl: "31536000",
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const { data } = supabase.storage.from(getMenuImageBucket()).getPublicUrl(path);
+  return data.publicUrl;
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Unable to read image file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 export async function checkoutOrder(
