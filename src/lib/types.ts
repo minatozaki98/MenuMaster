@@ -75,6 +75,7 @@ export type Order = {
   id: string;
   restaurantId: string;
   tableId: string;
+  tableSessionId?: string;
   tableName: string;
   status: OrderStatus;
   subtotalCents: number;

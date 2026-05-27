@@ -30,6 +30,18 @@ type LocalStorageState = {
 
 type SupabaseRow = Record<string, unknown>;
 
+function isRow(value: unknown): value is SupabaseRow {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asRows(value: unknown): SupabaseRow[] {
+  return Array.isArray(value) ? value.filter(isRow) : [];
+}
+
+function rowValue(row: SupabaseRow, snakeKey: string, camelKey = snakeKey) {
+  return row[camelKey] ?? row[snakeKey];
+}
+
 function cloneDemoState(): MenuMasterState {
   return JSON.parse(JSON.stringify(demoState)) as MenuMasterState;
 }
@@ -65,67 +77,138 @@ function saveLocalState(state: MenuMasterState) {
   }
 }
 
-function mapMenuItem(row: SupabaseRow, options: SupabaseRow[]): MenuItem {
+function emptyCustomerState(): MenuMasterState {
+  return {
+    ...cloneDemoState(),
+    tables: [],
+    orders: [],
+    payments: [],
+  };
+}
+
+function mapMenuOption(row: SupabaseRow) {
   return {
     id: String(row.id),
-    restaurantId: String(row.restaurant_id),
-    categoryId: String(row.category_id),
+    menuItemId: String(rowValue(row, "menu_item_id", "menuItemId")),
+    name: String(row.name),
+    priceDeltaCents: Number(rowValue(row, "price_delta_cents", "priceDeltaCents") ?? 0),
+  };
+}
+
+function mapMenuItem(row: SupabaseRow, options: SupabaseRow[]): MenuItem {
+  const embeddedOptions = asRows(row.options);
+  const optionRows = embeddedOptions.length
+    ? embeddedOptions
+    : options.filter(
+        (option) =>
+          rowValue(option, "menu_item_id", "menuItemId") ===
+          rowValue(row, "id"),
+      );
+
+  return {
+    id: String(row.id),
+    restaurantId: String(rowValue(row, "restaurant_id", "restaurantId")),
+    categoryId: String(rowValue(row, "category_id", "categoryId")),
     name: String(row.name),
     description: String(row.description ?? ""),
-    priceCents: Number(row.price_cents),
-    imageUrl: String(row.image_url ?? ""),
-    isAvailable: Boolean(row.is_available),
-    sortOrder: Number(row.sort_order ?? 0),
-    options: options
-      .filter((option) => option.menu_item_id === row.id)
-      .map((option) => ({
-        id: String(option.id),
-        menuItemId: String(option.menu_item_id),
-        name: String(option.name),
-        priceDeltaCents: Number(option.price_delta_cents ?? 0),
-      })),
+    priceCents: Number(rowValue(row, "price_cents", "priceCents")),
+    imageUrl: String(rowValue(row, "image_url", "imageUrl") ?? ""),
+    isAvailable: Boolean(rowValue(row, "is_available", "isAvailable")),
+    sortOrder: Number(rowValue(row, "sort_order", "sortOrder") ?? 0),
+    options: optionRows.map(mapMenuOption),
   };
 }
 
 function mapOrder(row: SupabaseRow, items: SupabaseRow[]): Order {
+  const embeddedItems = asRows(row.items);
+  const itemRows = embeddedItems.length
+    ? embeddedItems
+    : items.filter((item) => rowValue(item, "order_id", "orderId") === row.id);
+  const tableSessionId = rowValue(row, "table_session_id", "tableSessionId");
+
   return {
     id: String(row.id),
-    restaurantId: String(row.restaurant_id),
-    tableId: String(row.table_id),
-    tableName: String(row.table_name ?? "Table"),
+    restaurantId: String(rowValue(row, "restaurant_id", "restaurantId")),
+    tableId: String(rowValue(row, "table_id", "tableId")),
+    tableSessionId: tableSessionId ? String(tableSessionId) : undefined,
+    tableName: String(rowValue(row, "table_name", "tableName") ?? "Table"),
     status: row.status as OrderStatus,
-    subtotalCents: Number(row.subtotal_cents ?? 0),
-    serviceCents: Number(row.service_cents ?? 0),
-    taxCents: Number(row.tax_cents ?? 0),
-    discountCents: Number(row.discount_cents ?? 0),
-    totalCents: Number(row.total_cents ?? 0),
-    createdAt: String(row.created_at),
-    paidAt: row.paid_at ? String(row.paid_at) : undefined,
-    items: items
-      .filter((item) => item.order_id === row.id)
-      .map((item) => ({
+    subtotalCents: Number(rowValue(row, "subtotal_cents", "subtotalCents") ?? 0),
+    serviceCents: Number(rowValue(row, "service_cents", "serviceCents") ?? 0),
+    taxCents: Number(rowValue(row, "tax_cents", "taxCents") ?? 0),
+    discountCents: Number(rowValue(row, "discount_cents", "discountCents") ?? 0),
+    totalCents: Number(rowValue(row, "total_cents", "totalCents") ?? 0),
+    createdAt: String(rowValue(row, "created_at", "createdAt")),
+    paidAt: rowValue(row, "paid_at", "paidAt")
+      ? String(rowValue(row, "paid_at", "paidAt"))
+      : undefined,
+    items: itemRows.map((item) => {
+      const selectedOptions = rowValue(
+        item,
+        "selected_options",
+        "selectedOptions",
+      );
+      const priceSnapshot = rowValue(item, "price_snapshot", "priceSnapshot");
+
+      return {
         id: String(item.id),
-        orderId: String(item.order_id),
-        menuItemId: String(item.menu_item_id),
+        orderId: String(rowValue(item, "order_id", "orderId")),
+        menuItemId: String(rowValue(item, "menu_item_id", "menuItemId")),
         name: String(item.name),
         quantity: Number(item.quantity),
         note: item.note ? String(item.note) : undefined,
-        unitPriceCents: Number(item.unit_price_cents),
-        lineTotalCents: Number(item.line_total_cents),
-        selectedOptions: Array.isArray(item.selected_options)
-          ? (item.selected_options as OrderItem["selectedOptions"])
+        unitPriceCents: Number(rowValue(item, "unit_price_cents", "unitPriceCents")),
+        lineTotalCents: Number(rowValue(item, "line_total_cents", "lineTotalCents")),
+        selectedOptions: Array.isArray(selectedOptions)
+          ? (selectedOptions as OrderItem["selectedOptions"])
           : [],
-      })),
+        priceSnapshot: isRow(priceSnapshot)
+          ? (priceSnapshot as OrderItem["priceSnapshot"])
+          : undefined,
+      };
+    }),
   };
 }
 
 function mapPayment(row: SupabaseRow): Payment {
   return {
     id: String(row.id),
-    orderId: String(row.order_id),
-    amountCents: Number(row.amount_cents),
+    orderId: String(rowValue(row, "order_id", "orderId")),
+    amountCents: Number(rowValue(row, "amount_cents", "amountCents")),
     method: row.method as PaymentMethod,
-    createdAt: String(row.created_at),
+    createdAt: String(rowValue(row, "created_at", "createdAt")),
+  };
+}
+
+function mapMenuMasterStatePayload(payload: unknown): MenuMasterState {
+  if (!isRow(payload) || !isRow(payload.restaurant)) {
+    throw new Error("Customer menu state response was not valid.");
+  }
+
+  const restaurant = payload.restaurant;
+  return {
+    restaurant: {
+      id: String(restaurant.id),
+      name: String(restaurant.name),
+      slug: String(restaurant.slug),
+      serviceRate: Number(rowValue(restaurant, "service_rate", "serviceRate") ?? 0),
+      taxRate: Number(rowValue(restaurant, "tax_rate", "taxRate") ?? 0),
+    },
+    tables: asRows(payload.tables).map((table) => ({
+      id: String(table.id),
+      restaurantId: String(rowValue(table, "restaurant_id", "restaurantId")),
+      name: String(table.name),
+      token: String(table.token),
+    })),
+    categories: asRows(payload.categories).map((category) => ({
+      id: String(category.id),
+      restaurantId: String(rowValue(category, "restaurant_id", "restaurantId")),
+      name: String(category.name),
+      sortOrder: Number(rowValue(category, "sort_order", "sortOrder") ?? 0),
+    })),
+    menuItems: asRows(payload.menuItems).map((item) => mapMenuItem(item, [])),
+    orders: asRows(payload.orders).map((order) => mapOrder(order, [])),
+    payments: asRows(payload.payments).map(mapPayment),
   };
 }
 
@@ -196,6 +279,38 @@ export async function loadMenuMasterState(): Promise<MenuMasterState> {
     ),
     payments: (payments.data ?? []).map(mapPayment),
   };
+}
+
+export async function loadCustomerMenuState(tableToken: string): Promise<MenuMasterState> {
+  const supabase = createBrowserSupabaseClient();
+  if (!supabase) {
+    const state = getLocalState();
+    const table = findTableByToken(state, tableToken);
+    if (!table) {
+      return emptyCustomerState();
+    }
+
+    return {
+      ...state,
+      tables: [table],
+      orders: state.orders.filter((order) => order.tableId === table.id),
+      payments: [],
+    };
+  }
+
+  const { data, error } = await supabase.rpc("get_customer_state", {
+    p_table_token: tableToken,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    return emptyCustomerState();
+  }
+
+  return mapMenuMasterStatePayload(data);
 }
 
 export function findTableByToken(state: MenuMasterState, token: string) {
@@ -331,6 +446,39 @@ export async function submitOrder(table: RestaurantTable, cart: CartItem[]) {
   }
 
   return order;
+}
+
+export async function submitCustomerOrder(tableToken: string, cart: CartItem[]) {
+  const supabase = createBrowserSupabaseClient();
+  if (!supabase) {
+    const state = getLocalState();
+    const table = findTableByToken(state, tableToken);
+    if (!table) {
+      throw new Error("Invalid table token.");
+    }
+
+    return submitOrder(table, cart);
+  }
+
+  const { data, error } = await supabase.rpc("submit_customer_order", {
+    p_table_token: tableToken,
+    p_cart: cart.map((item) => ({
+      menuItemId: item.menuItemId,
+      quantity: item.quantity,
+      optionIds: item.optionIds,
+      note: item.note,
+    })),
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!isRow(data)) {
+    throw new Error("Order response was not valid.");
+  }
+
+  return mapOrder(data, []);
 }
 
 export async function updateOrderStatus(orderId: string, status: OrderStatus) {

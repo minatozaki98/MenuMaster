@@ -41,18 +41,19 @@ If Supabase env vars are not configured, the app runs in local demo mode. Demo a
 1. Create a Supabase project.
 2. Run `supabase/schema.sql` in the Supabase SQL editor.
 3. Run `supabase/storage.sql` in the Supabase SQL editor for the `menu-images` bucket.
-4. Create an auth user for admin login.
-5. Copy `.env.example` to `.env.local`.
-6. Fill:
+4. Run `supabase/table-sessions-security.sql` in the Supabase SQL editor to add table sessions, table-token customer RPCs, and tighter order RLS.
+5. Create an auth user for admin login.
+6. Copy `.env.example` to `.env.local`.
+7. Fill:
 
 ```powershell
 NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 ```
 
-7. Restart the dev server.
+8. Restart the dev server.
 
-The current RLS policies are intentionally demo-friendly. Before production, tighten customer order reads to table/session tokens and add real staff roles.
+Customer ordering is table-token scoped through Supabase RPC functions. Admin order, payment, and menu writes require an authenticated Supabase user. Before production, add real staff roles and rate limiting for anonymous customer order submission.
 
 ## Scripts
 

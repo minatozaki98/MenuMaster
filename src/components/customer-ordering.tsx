@@ -6,8 +6,8 @@ import { Minus, Plus, ReceiptText, ShoppingCart } from "lucide-react";
 import {
   findTableByToken,
   formatCurrency,
-  loadMenuMasterState,
-  submitOrder,
+  loadCustomerMenuState,
+  submitCustomerOrder,
 } from "@/lib/store";
 import type { CartItem, MenuItem, MenuMasterState, Order } from "@/lib/types";
 import { StatusPill } from "./status-pill";
@@ -26,10 +26,10 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const refresh = useCallback(async () => {
-    const nextState = await loadMenuMasterState();
+    const nextState = await loadCustomerMenuState(tableToken);
     setState(nextState);
     setActiveCategory((current) => current || nextState.categories[0]?.id || "");
-  }, []);
+  }, [tableToken]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void refresh(), 0);
@@ -118,7 +118,7 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
     setError("");
     setIsSubmitting(true);
     try {
-      const order = await submitOrder(table, cart);
+      const order = await submitCustomerOrder(tableToken, cart);
       setLastOrder(order);
       setCart([]);
       await refresh();
