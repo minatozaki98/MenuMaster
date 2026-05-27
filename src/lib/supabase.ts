@@ -1,4 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
+let browserSupabaseClient: SupabaseClient | null | undefined;
 
 export function hasSupabaseConfig() {
   return Boolean(
@@ -8,12 +10,18 @@ export function hasSupabaseConfig() {
 }
 
 export function createBrowserSupabaseClient() {
+  if (browserSupabaseClient !== undefined) {
+    return browserSupabaseClient;
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url || !anonKey) {
+    browserSupabaseClient = null;
     return null;
   }
 
-  return createClient(url, anonKey);
+  browserSupabaseClient = createClient(url, anonKey);
+  return browserSupabaseClient;
 }
