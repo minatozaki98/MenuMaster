@@ -355,7 +355,7 @@ export function AdminDashboard() {
             </div>
           ) : null}
 
-          <section className="rounded-lg bg-stone-950 p-4 text-white shadow-xl shadow-stone-950/10">
+          <section className="hidden rounded-lg bg-stone-950 p-4 text-white shadow-xl shadow-stone-950/10 md:block">
             <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
               <div>
                 <p className="text-sm font-semibold text-amber-300">
@@ -375,7 +375,7 @@ export function AdminDashboard() {
             </div>
           </section>
 
-          <div className="grid gap-3 md:grid-cols-4">
+          <div className="hidden gap-3 md:grid md:grid-cols-4">
             {(["new", "preparing", "ready", "paid"] as OrderStatus[]).map((status, index) => (
               <motion.div
                 key={status}

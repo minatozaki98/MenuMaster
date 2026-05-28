@@ -95,7 +95,7 @@ export function isOrderable(item: { isAvailable: boolean }) {
 }
 
 export function formatCurrency(cents: number) {
-  return new Intl.NumberFormat("my-MM", {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "MMK",
     maximumFractionDigits: 0,
