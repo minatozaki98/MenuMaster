@@ -70,6 +70,227 @@ for all
 using (auth.role() = 'authenticated')
 with check (auth.role() = 'authenticated');
 
+create or replace function public.table_session_json(p_session table_sessions)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when p_session.id is null then null
+    else jsonb_build_object(
+      'id', p_session.id,
+      'tableId', p_session.table_id,
+      'sessionToken', p_session.session_token,
+      'openedAt', p_session.opened_at,
+      'closedAt', p_session.closed_at
+    )
+  end;
+$$;
+
+create or replace function public.get_admin_table_sessions()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+begin
+  if auth.role() <> 'authenticated' then
+    raise exception 'Admin authentication is required.';
+  end if;
+
+  return coalesce((
+    select jsonb_agg(
+      jsonb_build_object(
+        'tableId', restaurant_tables.id,
+        'tableName', restaurant_tables.name,
+        'token', restaurant_tables.token,
+        'status', case when active_session.id is null then 'closed' else 'open' end,
+        'activeSessionId', active_session.id,
+        'openedAt', active_session.opened_at,
+        'closedAt', latest_session.closed_at,
+        'unpaidOrderCount', coalesce(order_stats.unpaid_order_count, 0),
+        'latestOrderAt', order_stats.latest_order_at
+      )
+      order by restaurant_tables.name
+    )
+    from restaurant_tables
+    left join lateral (
+      select *
+      from table_sessions
+      where table_sessions.table_id = restaurant_tables.id
+      order by table_sessions.opened_at desc
+      limit 1
+    ) latest_session on true
+    left join lateral (
+      select *
+      from table_sessions
+      where table_sessions.table_id = restaurant_tables.id
+        and table_sessions.closed_at is null
+      order by table_sessions.opened_at desc
+      limit 1
+    ) active_session on true
+    left join lateral (
+      select
+        count(*) filter (
+          where orders.status::text not in ('paid', 'cancelled')
+        ) as unpaid_order_count,
+        max(orders.created_at) as latest_order_at
+      from orders
+      where orders.table_session_id = active_session.id
+    ) order_stats on true
+  ), '[]'::jsonb);
+end;
+$$;
+
+create or replace function public.open_table_session(p_table_id uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  selected_table restaurant_tables%rowtype;
+  selected_session table_sessions%rowtype;
+begin
+  if auth.role() <> 'authenticated' then
+    raise exception 'Admin authentication is required.';
+  end if;
+
+  select *
+  into selected_table
+  from restaurant_tables
+  where id = p_table_id;
+
+  if selected_table.id is null then
+    raise exception 'Table not found.';
+  end if;
+
+  select *
+  into selected_session
+  from table_sessions
+  where table_id = p_table_id
+    and closed_at is null
+  order by opened_at desc
+  limit 1;
+
+  if selected_session.id is null then
+    insert into table_sessions (table_id)
+    values (p_table_id)
+    returning * into selected_session;
+  end if;
+
+  return public.table_session_json(selected_session);
+end;
+$$;
+
+create or replace function public.close_table_session(p_table_id uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  selected_session table_sessions%rowtype;
+  unpaid_order_count integer;
+begin
+  if auth.role() <> 'authenticated' then
+    raise exception 'Admin authentication is required.';
+  end if;
+
+  select *
+  into selected_session
+  from table_sessions
+  where table_id = p_table_id
+    and closed_at is null
+  order by opened_at desc
+  limit 1;
+
+  if selected_session.id is null then
+    return null;
+  end if;
+
+  select count(*)
+  into unpaid_order_count
+  from orders
+  where table_session_id = selected_session.id
+    and status::text not in ('paid', 'cancelled');
+
+  if unpaid_order_count > 0 then
+    raise exception 'Settle or cancel open orders before closing this table.';
+  end if;
+
+  update table_sessions
+  set closed_at = now()
+  where id = selected_session.id
+  returning * into selected_session;
+
+  return public.table_session_json(selected_session);
+end;
+$$;
+
+create or replace function public.reset_table_session(p_table_id uuid)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  selected_table restaurant_tables%rowtype;
+  selected_session table_sessions%rowtype;
+  new_session table_sessions%rowtype;
+  unpaid_order_count integer;
+begin
+  if auth.role() <> 'authenticated' then
+    raise exception 'Admin authentication is required.';
+  end if;
+
+  select *
+  into selected_table
+  from restaurant_tables
+  where id = p_table_id;
+
+  if selected_table.id is null then
+    raise exception 'Table not found.';
+  end if;
+
+  select *
+  into selected_session
+  from table_sessions
+  where table_id = p_table_id
+    and closed_at is null
+  order by opened_at desc
+  limit 1;
+
+  if selected_session.id is not null then
+    select count(*)
+    into unpaid_order_count
+    from orders
+    where table_session_id = selected_session.id
+      and status::text not in ('paid', 'cancelled');
+
+    if unpaid_order_count > 0 then
+      raise exception 'Settle or cancel open orders before resetting this table.';
+    end if;
+
+    update table_sessions
+    set closed_at = now()
+    where id = selected_session.id;
+  end if;
+
+  insert into table_sessions (table_id)
+  values (p_table_id)
+  returning * into new_session;
+
+  return public.table_session_json(new_session);
+end;
+$$;
+
 create or replace function public.order_with_items_json(p_order_id uuid)
 returns jsonb
 language sql
@@ -413,3 +634,7 @@ $$;
 
 grant execute on function public.get_customer_state(text) to anon, authenticated;
 grant execute on function public.submit_customer_order(text, jsonb) to anon, authenticated;
+grant execute on function public.get_admin_table_sessions() to authenticated;
+grant execute on function public.open_table_session(uuid) to authenticated;
+grant execute on function public.close_table_session(uuid) to authenticated;
+grant execute on function public.reset_table_session(uuid) to authenticated;

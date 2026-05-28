@@ -9,6 +9,7 @@ MenuMaster is a database-backed demo for restaurant QR ordering and POS workflow
 - Menu browsing with options, notes, cart, and out-of-stock state
 - Realtime-ready order board
 - Manual POS checkout for cash, card, or QR transfer
+- Admin table session controls for opening, closing, and resetting QR sessions
 - Menu admin with add/edit item, selectable/uploaded images, and availability toggle
 - Order history, payment history, and item sales summary
 - Supabase Postgres schema and seed data

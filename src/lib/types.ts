@@ -24,6 +24,26 @@ export type RestaurantTable = {
   token: string;
 };
 
+export type TableSession = {
+  id: string;
+  tableId: string;
+  sessionToken: string;
+  openedAt: string;
+  closedAt?: string;
+};
+
+export type TableSessionSummary = {
+  tableId: string;
+  tableName: string;
+  token: string;
+  status: "open" | "closed";
+  activeSessionId?: string;
+  openedAt?: string;
+  closedAt?: string;
+  unpaidOrderCount: number;
+  latestOrderAt?: string;
+};
+
 export type MenuCategory = {
   id: string;
   restaurantId: string;
@@ -99,6 +119,7 @@ export type Payment = {
 export type MenuMasterState = {
   restaurant: Restaurant;
   tables: RestaurantTable[];
+  tableSessions: TableSession[];
   categories: MenuCategory[];
   menuItems: MenuItem[];
   orders: Order[];

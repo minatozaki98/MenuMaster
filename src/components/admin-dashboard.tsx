@@ -23,10 +23,14 @@ import {
 } from "@/lib/menu-images";
 import {
   checkoutOrder,
+  closeTableSession,
   formatCurrency,
   getAdminSession,
   loadMenuMasterState,
+  loadTableSessionSummaries,
+  openTableSession,
   orderCountByStatus,
+  resetTableSession,
   revenueToday,
   salesByMenuItem,
   saveMenuItem,
@@ -42,6 +46,7 @@ import type {
   Order,
   OrderStatus,
   PaymentMethod,
+  TableSessionSummary,
 } from "@/lib/types";
 import { StatusPill } from "./status-pill";
 
@@ -56,12 +61,13 @@ const statuses: OrderStatus[] = [
 ];
 const MAX_MENU_IMAGE_BYTES = 1_500_000;
 
-type AdminTab = "orders" | "pos" | "menu" | "history" | "qr";
+type AdminTab = "orders" | "pos" | "menu" | "history" | "tables";
 
 export function AdminDashboard() {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
   const [state, setState] = useState<MenuMasterState | null>(null);
+  const [tableSessions, setTableSessions] = useState<TableSessionSummary[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>("orders");
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [editingMenuItemId, setEditingMenuItemId] = useState("");
@@ -76,8 +82,12 @@ export function AdminDashboard() {
       return;
     }
 
-    const nextState = await loadMenuMasterState();
+    const [nextState, nextTableSessions] = await Promise.all([
+      loadMenuMasterState(),
+      loadTableSessionSummaries(),
+    ]);
     setState(nextState);
+    setTableSessions(nextTableSessions);
     setSelectedOrderId((current) => current || nextState.orders[0]?.id || "");
   }, [router]);
 
@@ -148,6 +158,36 @@ export function AdminDashboard() {
       await refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to update menu.");
+    }
+  }
+
+  async function handleOpenTable(tableId: string) {
+    setError("");
+    try {
+      await openTableSession(tableId);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to open table.");
+    }
+  }
+
+  async function handleCloseTable(tableId: string) {
+    setError("");
+    try {
+      await closeTableSession(tableId);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to close table.");
+    }
+  }
+
+  async function handleResetTable(tableId: string) {
+    setError("");
+    try {
+      await resetTableSession(tableId);
+      await refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to reset table.");
     }
   }
 
@@ -224,7 +264,7 @@ export function AdminDashboard() {
     { id: "pos", label: "POS", icon: Banknote },
     { id: "menu", label: "Menu", icon: Settings2 },
     { id: "history", label: "History", icon: History },
-    { id: "qr", label: "QR", icon: QrCode },
+    { id: "tables", label: "Tables", icon: QrCode },
   ];
 
   return (
@@ -374,15 +414,20 @@ export function AdminDashboard() {
               </motion.div>
             ) : null}
 
-            {activeTab === "qr" ? (
+            {activeTab === "tables" ? (
               <motion.div
-                key="qr"
+                key="tables"
                 initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
                 animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
                 exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
                 transition={{ duration: 0.18 }}
               >
-                <QrPanel tables={state.tables} />
+                <TablesPanel
+                  tableSessions={tableSessions}
+                  onClose={handleCloseTable}
+                  onOpen={handleOpenTable}
+                  onReset={handleResetTable}
+                />
               </motion.div>
             ) : null}
           </AnimatePresence>
@@ -906,19 +951,30 @@ function HistoryPanel({
   );
 }
 
-function QrPanel({ tables }: { tables: MenuMasterState["tables"] }) {
+function TablesPanel({
+  tableSessions,
+  onClose,
+  onOpen,
+  onReset,
+}: {
+  tableSessions: TableSessionSummary[];
+  onClose: (tableId: string) => Promise<void>;
+  onOpen: (tableId: string) => Promise<void>;
+  onReset: (tableId: string) => Promise<void>;
+}) {
   const shouldReduceMotion = useReducedMotion();
 
   return (
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {tables.map((table, index) => {
+      {tableSessions.map((table, index) => {
         const url =
           typeof window === "undefined"
             ? `/t/${table.token}`
             : `${window.location.origin}/t/${table.token}`;
+        const hasUnpaidOrders = table.unpaidOrderCount > 0;
         return (
           <motion.article
-            key={table.id}
+            key={table.tableId}
             initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.98 }}
             animate={shouldReduceMotion ? undefined : { opacity: 1, scale: 1 }}
             whileHover={shouldReduceMotion ? undefined : { y: -2 }}
@@ -928,10 +984,71 @@ function QrPanel({ tables }: { tables: MenuMasterState["tables"] }) {
             }}
             className="rounded-2xl bg-white p-5 ring-1 ring-slate-200"
           >
-            <h2 className="text-lg font-semibold">{table.name}</h2>
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">{table.tableName}</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {table.status === "open" ? "Open session" : "Closed session"}
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                  table.status === "open"
+                    ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+                    : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+                }`}
+              >
+                {table.status}
+              </span>
+            </div>
             <p className="mb-4 mt-1 break-all text-sm text-slate-500">{url}</p>
             <div className="inline-block rounded-2xl bg-white p-3 ring-1 ring-slate-200">
               <QRCodeSVG value={url} size={180} />
+            </div>
+            <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-xl bg-slate-50 p-3">
+                <dt className="text-slate-500">Open orders</dt>
+                <dd className="mt-1 font-semibold">{table.unpaidOrderCount}</dd>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3">
+                <dt className="text-slate-500">Latest order</dt>
+                <dd className="mt-1 font-semibold">
+                  {table.latestOrderAt
+                    ? new Date(table.latestOrderAt).toLocaleTimeString()
+                    : "None"}
+                </dd>
+              </div>
+            </dl>
+            {hasUnpaidOrders ? (
+              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
+                Settle or cancel open orders before closing or resetting this table.
+              </p>
+            ) : null}
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                disabled={table.status === "open"}
+                onClick={() => void onOpen(table.tableId)}
+                className="h-10 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+              >
+                Open
+              </button>
+              <button
+                type="button"
+                disabled={table.status === "closed" || hasUnpaidOrders}
+                onClick={() => void onClose(table.tableId)}
+                className="h-10 rounded-lg bg-slate-100 px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 disabled:cursor-not-allowed disabled:text-slate-400"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                disabled={hasUnpaidOrders}
+                onClick={() => void onReset(table.tableId)}
+                className="h-10 rounded-lg bg-emerald-700 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+              >
+                Reset
+              </button>
             </div>
           </motion.article>
         );

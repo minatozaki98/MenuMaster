@@ -8,6 +8,14 @@ import {
   formatCurrency,
 } from "./pos";
 import { createBrowserSupabaseClient, hasSupabaseConfig } from "./supabase";
+import {
+  activeCustomerOrdersForTable,
+  closeLocalTableSession,
+  ensureLocalTableSessions,
+  openLocalTableSession,
+  resetLocalTableSession,
+  summarizeTableSessions,
+} from "./table-sessions";
 import type {
   CartItem,
   MenuItem,
@@ -18,6 +26,8 @@ import type {
   Payment,
   PaymentMethod,
   RestaurantTable,
+  TableSession,
+  TableSessionSummary,
 } from "./types";
 
 const STORAGE_KEY = "menumaster-demo-state";
@@ -81,6 +91,7 @@ function emptyCustomerState(): MenuMasterState {
   return {
     ...cloneDemoState(),
     tables: [],
+    tableSessions: [],
     orders: [],
     payments: [],
   };
@@ -180,6 +191,39 @@ function mapPayment(row: SupabaseRow): Payment {
   };
 }
 
+function mapTableSession(row: SupabaseRow): TableSession {
+  return {
+    id: String(row.id),
+    tableId: String(rowValue(row, "table_id", "tableId")),
+    sessionToken: String(rowValue(row, "session_token", "sessionToken")),
+    openedAt: String(rowValue(row, "opened_at", "openedAt")),
+    closedAt: rowValue(row, "closed_at", "closedAt")
+      ? String(rowValue(row, "closed_at", "closedAt"))
+      : undefined,
+  };
+}
+
+function mapTableSessionSummary(row: SupabaseRow): TableSessionSummary {
+  const activeSessionId = rowValue(row, "active_session_id", "activeSessionId");
+  const openedAt = rowValue(row, "opened_at", "openedAt");
+  const closedAt = rowValue(row, "closed_at", "closedAt");
+  const latestOrderAt = rowValue(row, "latest_order_at", "latestOrderAt");
+
+  return {
+    tableId: String(rowValue(row, "table_id", "tableId")),
+    tableName: String(rowValue(row, "table_name", "tableName")),
+    token: String(row.token),
+    status: row.status === "open" ? "open" : "closed",
+    activeSessionId: activeSessionId ? String(activeSessionId) : undefined,
+    openedAt: openedAt ? String(openedAt) : undefined,
+    closedAt: closedAt ? String(closedAt) : undefined,
+    unpaidOrderCount: Number(
+      rowValue(row, "unpaid_order_count", "unpaidOrderCount") ?? 0,
+    ),
+    latestOrderAt: latestOrderAt ? String(latestOrderAt) : undefined,
+  };
+}
+
 function mapMenuMasterStatePayload(payload: unknown): MenuMasterState {
   if (!isRow(payload) || !isRow(payload.restaurant)) {
     throw new Error("Customer menu state response was not valid.");
@@ -200,6 +244,7 @@ function mapMenuMasterStatePayload(payload: unknown): MenuMasterState {
       name: String(table.name),
       token: String(table.token),
     })),
+    tableSessions: asRows(payload.tableSessions).map(mapTableSession),
     categories: asRows(payload.categories).map((category) => ({
       id: String(category.id),
       restaurantId: String(rowValue(category, "restaurant_id", "restaurantId")),
@@ -215,12 +260,15 @@ function mapMenuMasterStatePayload(payload: unknown): MenuMasterState {
 export async function loadMenuMasterState(): Promise<MenuMasterState> {
   const supabase = createBrowserSupabaseClient();
   if (!supabase) {
-    return getLocalState();
+    const state = ensureLocalTableSessions(getLocalState());
+    saveLocalState(state);
+    return state;
   }
 
   const [
     restaurants,
     tables,
+    tableSessions,
     categories,
     menuItems,
     options,
@@ -230,6 +278,9 @@ export async function loadMenuMasterState(): Promise<MenuMasterState> {
   ] = await Promise.all([
     supabase.from("restaurants").select("*").limit(1).single(),
     supabase.from("restaurant_tables").select("*").order("name"),
+    supabase.from("table_sessions").select("*").order("opened_at", {
+      ascending: false,
+    }),
     supabase.from("menu_categories").select("*").order("sort_order"),
     supabase.from("menu_items").select("*").order("sort_order"),
     supabase.from("menu_item_options").select("*"),
@@ -241,6 +292,7 @@ export async function loadMenuMasterState(): Promise<MenuMasterState> {
   if (
     restaurants.error ||
     tables.error ||
+    tableSessions.error ||
     categories.error ||
     menuItems.error ||
     options.error ||
@@ -265,6 +317,7 @@ export async function loadMenuMasterState(): Promise<MenuMasterState> {
       name: String(table.name),
       token: String(table.token),
     })),
+    tableSessions: (tableSessions.data ?? []).map(mapTableSession),
     categories: (categories.data ?? []).map((category) => ({
       id: String(category.id),
       restaurantId: String(category.restaurant_id),
@@ -289,11 +342,13 @@ export async function loadCustomerMenuState(tableToken: string): Promise<MenuMas
     if (!table) {
       return emptyCustomerState();
     }
+    const opened = openLocalTableSession(state, table.id);
+    saveLocalState(opened.state);
 
     return {
-      ...state,
+      ...opened.state,
       tables: [table],
-      orders: state.orders.filter((order) => order.tableId === table.id),
+      orders: activeCustomerOrdersForTable(opened.state, table.id),
       payments: [],
     };
   }
@@ -362,7 +417,7 @@ export async function getAdminSession() {
 }
 
 export async function submitOrder(table: RestaurantTable, cart: CartItem[]) {
-  const state = await loadMenuMasterState();
+  let state = await loadMenuMasterState();
   const orderItems = cart.map((cartItem) => {
     const menuItem = state.menuItems.find((item) => item.id === cartItem.menuItemId);
     if (!menuItem || !menuItem.isAvailable) {
@@ -394,10 +449,18 @@ export async function submitOrder(table: RestaurantTable, cart: CartItem[]) {
     taxRate: state.restaurant.taxRate,
   });
   const orderId = crypto.randomUUID();
+  const supabase = createBrowserSupabaseClient();
+  let tableSessionId: string | undefined;
+  if (!supabase) {
+    const opened = openLocalTableSession(state, table.id);
+    state = opened.state;
+    tableSessionId = opened.session.id;
+  }
   const order: Order = {
     id: orderId,
     restaurantId: state.restaurant.id,
     tableId: table.id,
+    tableSessionId,
     tableName: table.name,
     status: "new",
     createdAt: new Date().toISOString(),
@@ -405,7 +468,6 @@ export async function submitOrder(table: RestaurantTable, cart: CartItem[]) {
     ...totals,
   };
 
-  const supabase = createBrowserSupabaseClient();
   if (supabase) {
     const { error: orderError } = await supabase.from("orders").insert({
       id: order.id,
@@ -519,6 +581,69 @@ export async function updateMenuAvailability(menuItemId: string, isAvailable: bo
     item.id === menuItemId ? { ...item, isAvailable } : item,
   );
   saveLocalState(state);
+}
+
+export async function loadTableSessionSummaries(): Promise<TableSessionSummary[]> {
+  const supabase = createBrowserSupabaseClient();
+  if (supabase) {
+    const { data, error } = await supabase.rpc("get_admin_table_sessions");
+    if (error) {
+      throw new Error(error.message);
+    }
+    return asRows(data).map(mapTableSessionSummary);
+  }
+
+  const state = ensureLocalTableSessions(getLocalState());
+  saveLocalState(state);
+  return summarizeTableSessions(state);
+}
+
+export async function openTableSession(tableId: string) {
+  const supabase = createBrowserSupabaseClient();
+  if (supabase) {
+    const { error } = await supabase.rpc("open_table_session", {
+      p_table_id: tableId,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+    return;
+  }
+
+  const opened = openLocalTableSession(getLocalState(), tableId);
+  saveLocalState(opened.state);
+}
+
+export async function closeTableSession(tableId: string) {
+  const supabase = createBrowserSupabaseClient();
+  if (supabase) {
+    const { error } = await supabase.rpc("close_table_session", {
+      p_table_id: tableId,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+    return;
+  }
+
+  const state = closeLocalTableSession(getLocalState(), tableId);
+  saveLocalState(state);
+}
+
+export async function resetTableSession(tableId: string) {
+  const supabase = createBrowserSupabaseClient();
+  if (supabase) {
+    const { error } = await supabase.rpc("reset_table_session", {
+      p_table_id: tableId,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+    return;
+  }
+
+  const reset = resetLocalTableSession(getLocalState(), tableId);
+  saveLocalState(reset.state);
 }
 
 export async function saveMenuItem(menuItem: MenuItem) {

@@ -1,7 +1,7 @@
 import { getMenuImageChoice } from "./menu-images";
 import type { MenuItem, MenuMasterState, RestaurantTable } from "./types";
 
-export const DEMO_STATE_VERSION = 3;
+export const DEMO_STATE_VERSION = 4;
 export const DEMO_TABLE_TOKEN = "table-7-demo";
 
 const tables: RestaurantTable[] = Array.from({ length: 12 }, (_, index) => {
@@ -271,6 +271,7 @@ export const demoState: MenuMasterState = {
     taxRate: 0.07,
   },
   tables,
+  tableSessions: [],
   categories: [
     {
       id: "cat-starters",
