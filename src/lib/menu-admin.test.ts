@@ -10,7 +10,7 @@ describe("admin menu form helpers", () => {
     const item = buildMenuItemFromAdminForm(demoState, {
       categoryId: "cat-mains",
       name: "  Fish and Chips  ",
-      price: 13.5,
+      price: 13500,
       description: "  Beer-battered fish with fries.  ",
       imageChoiceId: "rice-bowl",
     });
@@ -21,7 +21,7 @@ describe("admin menu form helpers", () => {
       categoryId: "cat-mains",
       name: "Fish and Chips",
       description: "Beer-battered fish with fries.",
-      priceCents: 1350,
+      priceCents: 13500,
       imageUrl: getMenuImageChoice("rice-bowl").url,
       isAvailable: true,
     });
@@ -35,7 +35,7 @@ describe("admin menu form helpers", () => {
     const item = buildMenuItemFromAdminForm(demoState, {
       categoryId: "cat-drinks",
       name: "House IPA",
-      price: 7.5,
+      price: 7500,
       description: "Rotating tap beer.",
       imageChoiceId: "coffee",
       uploadedImageUrl: "data:image/png;base64,uploaded-image",
@@ -53,7 +53,7 @@ describe("admin menu form helpers", () => {
       id: existing.id,
       categoryId: "cat-starters",
       name: "Buffalo Wings Basket",
-      price: 10.25,
+      price: 10250,
       description: "Updated description",
       imageChoiceId: "satay",
     });
@@ -62,7 +62,7 @@ describe("admin menu form helpers", () => {
     expect(item.isAvailable).toBe(existing.isAvailable);
     expect(item.options).toEqual(existing.options);
     expect(item.name).toBe("Buffalo Wings Basket");
-    expect(item.priceCents).toBe(1025);
+    expect(item.priceCents).toBe(10250);
   });
 
   it("preserves an existing uploaded image when no new image is selected", () => {
@@ -79,7 +79,7 @@ describe("admin menu form helpers", () => {
       id: existing.id,
       categoryId: existing.categoryId,
       name: existing.name,
-      price: existing.priceCents / 100,
+      price: existing.priceCents,
       description: existing.description,
     });
 

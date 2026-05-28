@@ -33,7 +33,7 @@ export function buildMenuItemFromAdminForm(
     categoryId: values.categoryId,
     name: values.name.trim(),
     description: values.description.trim(),
-    priceCents: Math.round(values.price * 100),
+    priceCents: Math.round(values.price),
     imageUrl,
     isAvailable: existing?.isAvailable ?? true,
     sortOrder: existing?.sortOrder ?? state.menuItems.length + 1,

@@ -2,14 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Minus, Plus, ReceiptText, ShoppingCart } from "lucide-react";
+import { Clock3, Minus, Plus, ReceiptText, ShoppingCart, Sparkles } from "lucide-react";
 import {
   findTableByToken,
   formatCurrency,
   loadCustomerMenuState,
   submitCustomerOrder,
 } from "@/lib/store";
+import {
+  translateCategory,
+  translateMenuItem,
+  translateOption,
+  translateTableName,
+} from "@/lib/i18n";
 import type { CartItem, MenuItem, MenuMasterState, Order } from "@/lib/types";
+import { LanguageSwitcher } from "./language-switcher";
+import { useLanguage } from "./language-provider";
 import { StatusPill } from "./status-pill";
 
 type CustomerOrderingProps = {
@@ -18,11 +26,13 @@ type CustomerOrderingProps = {
 
 export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
   const shouldReduceMotion = useReducedMotion();
+  const { language, t } = useLanguage();
   const [state, setState] = useState<MenuMasterState | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("");
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [error, setError] = useState("");
+  const [isReviewing, setIsReviewing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -71,7 +81,7 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
 
   function addToCart(item: MenuItem, optionIds: string[] = []) {
     if (!item.isAvailable) {
-      setError(`${item.name} is out of stock.`);
+      setError(`${translateMenuItem(language, item).name} ${t("outOfStock")}.`);
       return;
     }
 
@@ -121,59 +131,195 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
       const order = await submitCustomerOrder(tableToken, cart);
       setLastOrder(order);
       setCart([]);
+      setIsReviewing(false);
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to submit order.");
+      setError(caught instanceof Error ? caught.message : t("unableToSubmitOrder"));
     } finally {
       setIsSubmitting(false);
     }
   }
 
   if (!state) {
-    return <main className="min-h-dvh bg-stone-50 p-6">Loading menu...</main>;
+    return (
+      <main className="min-h-dvh bg-[#f6f1e8] p-6 text-stone-950">
+        {t("loadingMenu")}
+      </main>
+    );
   }
 
   if (!table) {
     return (
-      <main className="min-h-dvh bg-stone-50 p-6">
-        <section className="mx-auto max-w-md rounded-2xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
-          <h1 className="text-2xl font-semibold">Invalid table QR</h1>
+      <main className="min-h-dvh bg-[#f6f1e8] p-6">
+        <section className="mx-auto max-w-md rounded-lg bg-white p-6 shadow-sm ring-1 ring-stone-200">
+          <h1 className="text-2xl font-semibold">{t("invalidQr")}</h1>
           <p className="mt-2 text-stone-600">
-            This QR token does not match a table in the demo restaurant.
+            {t("invalidQrDescription")}
           </p>
         </section>
       </main>
     );
   }
 
-  return (
-    <main className="min-h-dvh bg-stone-50 pb-36 text-stone-950">
-      <header className="sticky top-0 z-20 border-b border-stone-200 bg-white/95 px-4 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-stone-500">{table.name}</p>
-            <h1 className="text-2xl font-semibold">{state.restaurant.name}</h1>
+  if (cart.length > 0 && isReviewing) {
+    return (
+      <main className="min-h-dvh bg-[#f6f1e8] text-stone-950">
+        <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-[#f6f1e8]/92 px-4 py-3 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-amber-800">
+                {translateTableName(language, table.name)}
+              </p>
+              <h1 className="truncate text-2xl font-semibold">{t("orderReview")}</h1>
+              <p className="text-sm text-stone-600">{t("reviewBeforeSend")}</p>
+            </div>
+            <LanguageSwitcher compact />
           </div>
-          <div className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">
-            Open
+        </header>
+
+        <section className="mx-auto max-w-4xl px-4 py-5">
+          <button
+            type="button"
+            onClick={() => setIsReviewing(false)}
+            className="mb-4 h-11 rounded-md bg-white px-4 text-sm font-semibold text-stone-700 ring-1 ring-stone-200 transition hover:bg-stone-50"
+          >
+            {t("backToMenu")}
+          </button>
+
+          <div className="rounded-lg bg-white p-4 shadow-sm shadow-stone-300/50 ring-1 ring-stone-200">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="text-amber-800" size={20} aria-hidden="true" />
+                <h2 className="text-xl font-semibold">{t("cart")}</h2>
+              </div>
+              <span className="rounded-full bg-stone-100 px-3 py-1 text-sm text-stone-600">
+                {cart.reduce((sum, item) => sum + item.quantity, 0)} {t("items")}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {cartLines.map((line, index) => (
+                <motion.div
+                  key={`${line.cartItem.menuItemId}-${line.cartItem.optionIds.join("-")}`}
+                  layout
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                  animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                  exit={shouldReduceMotion ? undefined : { opacity: 0, x: 24 }}
+                  transition={{ duration: 0.18 }}
+                  className="grid gap-4 rounded-lg bg-stone-50 p-4 ring-1 ring-stone-100 md:grid-cols-[1fr_auto]"
+                >
+                  <div>
+                    <p className="flex items-center gap-1.5 font-semibold">
+                      <Sparkles size={16} aria-hidden="true" />
+                      {line.item ? translateMenuItem(language, line.item).name : ""}
+                    </p>
+                    <p className="mt-1 text-sm text-stone-500">
+                      {line.selectedOptions
+                        .map((option) => translateOption(language, option.id, option.name))
+                        .join(", ") || t("standard")}
+                    </p>
+                    <label className="mt-3 block">
+                      <span className="mb-1 block text-sm font-semibold text-stone-700">
+                        {t("kitchenNote")}
+                      </span>
+                      <input
+                        value={line.cartItem.note}
+                        onChange={(event) => updateNote(index, event.target.value)}
+                        placeholder={t("kitchenNote")}
+                        className="h-12 w-full rounded-md border border-stone-200 bg-white px-3 text-base outline-none focus:border-stone-950 focus:ring-4 focus:ring-amber-500/20"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 md:justify-end">
+                    <div className="flex items-center rounded-md bg-white ring-1 ring-stone-200">
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(index, -1)}
+                        className="flex size-11 items-center justify-center"
+                        aria-label="Decrease quantity"
+                      >
+                        <Minus size={16} aria-hidden="true" />
+                      </button>
+                      <span className="w-10 text-center font-semibold">
+                        {line.cartItem.quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(index, 1)}
+                        className="flex size-11 items-center justify-center"
+                        aria-label="Increase quantity"
+                      >
+                        <Plus size={16} aria-hidden="true" />
+                      </button>
+                    </div>
+                    <p className="min-w-28 text-right font-semibold">
+                      {formatCurrency(line.lineTotal)}
+                    </p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+
+            {error ? <p className="mt-3 text-sm text-rose-700">{error}</p> : null}
+
+            <div className="mt-5 flex flex-col gap-3 border-t border-stone-200 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm text-stone-500">{t("total")}</p>
+                <p className="text-2xl font-semibold">{formatCurrency(cartSubtotal)}</p>
+              </div>
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => void placeOrder()}
+                className="h-14 rounded-md bg-emerald-700 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:shadow-none"
+              >
+                {isSubmitting ? t("sending") : `${t("placeOrder")} ${formatCurrency(cartSubtotal)}`}
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-dvh bg-[#f6f1e8] pb-28 text-stone-950">
+      <header className="sticky top-0 z-20 border-b border-stone-200/80 bg-[#f6f1e8]/92 px-4 py-3 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-amber-800">
+              {translateTableName(language, table.name)}
+            </p>
+            <h1 className="truncate text-2xl font-semibold">{state.restaurant.name}</h1>
+            <p className="hidden text-sm text-stone-600 sm:block">
+              {t("browseSendKitchen")}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher compact />
+            <div className="flex items-center gap-2 rounded-md bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 ring-1 ring-emerald-200">
+              <Clock3 size={16} aria-hidden="true" />
+              {t("open")}
+            </div>
           </div>
         </div>
       </header>
 
       <div className="mx-auto grid max-w-6xl gap-5 px-4 py-5 lg:grid-cols-[1fr_360px]">
         <section>
-          <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+          <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
             {categories.map((category) => (
               <button
                 key={category.id}
                 onClick={() => setActiveCategory(category.id)}
-                className={`h-11 shrink-0 rounded-full px-4 text-sm font-semibold transition ${
+                className={`h-11 shrink-0 rounded-md px-4 text-sm font-semibold transition ${
                   activeCategory === category.id
-                    ? "bg-stone-950 text-white"
-                    : "bg-white text-stone-700 ring-1 ring-stone-200"
+                    ? "bg-stone-950 text-white shadow-lg shadow-stone-900/15"
+                    : "bg-white/88 text-stone-700 ring-1 ring-stone-200 hover:bg-white"
                 }`}
               >
-                {category.name}
+                {translateCategory(language, category.id, category.name)}
               </button>
             ))}
           </div>
@@ -190,19 +336,30 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
                   delay: shouldReduceMotion ? 0 : Math.min(index * 0.035, 0.18),
                   duration: 0.22,
                 }}
-                className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-stone-200"
+                className="group overflow-hidden rounded-lg bg-white shadow-sm shadow-stone-300/50 ring-1 ring-stone-200"
               >
-                <div
-                  className="h-40 bg-cover bg-center"
-                  style={{ backgroundImage: `url(${item.imageUrl})` }}
-                  aria-label={item.name}
-                />
+                {(() => {
+                  const translatedItem = translateMenuItem(language, item);
+                  return (
+                    <>
+                <div className="relative h-44 overflow-hidden">
+                  <div
+                    className="absolute inset-0 bg-cover bg-center transition duration-500 motion-safe:group-hover:scale-105"
+                    style={{ backgroundImage: `url(${item.imageUrl})` }}
+                    aria-label={item.name}
+                  />
+                  {!item.isAvailable ? (
+                    <div className="absolute inset-0 grid place-items-center bg-stone-950/58 text-sm font-semibold text-white">
+                      {t("outOfStock")}
+                    </div>
+                  ) : null}
+                </div>
                 <div className="p-4">
                   <div className="mb-2 flex items-start justify-between gap-3">
                     <div>
-                      <h2 className="text-lg font-semibold">{item.name}</h2>
+                      <h2 className="text-lg font-semibold">{translatedItem.name}</h2>
                       <p className="mt-1 text-sm leading-6 text-stone-600">
-                        {item.description}
+                        {translatedItem.description}
                       </p>
                     </div>
                     <p className="shrink-0 font-semibold">
@@ -218,9 +375,9 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
                           type="button"
                           disabled={!item.isAvailable}
                           onClick={() => addToCart(item, [option.id])}
-                          className="min-h-10 rounded-lg bg-stone-100 px-3 text-sm font-medium text-stone-700 disabled:opacity-40"
+                          className="min-h-10 rounded-md bg-amber-50 px-3 text-sm font-semibold text-amber-950 ring-1 ring-amber-100 transition hover:bg-amber-100 disabled:opacity-40"
                         >
-                          {option.name}
+                          {translateOption(language, option.id, option.name)}
                           {option.priceDeltaCents
                             ? ` +${formatCurrency(option.priceDeltaCents)}`
                             : ""}
@@ -233,18 +390,21 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
                     type="button"
                     disabled={!item.isAvailable}
                     onClick={() => addToCart(item)}
-                    className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-stone-950 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+                    className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-stone-950 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-300"
                   >
                     <Plus size={18} aria-hidden="true" />
-                    {item.isAvailable ? "Add to cart" : "Out of stock"}
+                    {item.isAvailable ? t("addToCart") : t("outOfStock")}
                   </button>
                 </div>
+                    </>
+                  );
+                })()}
               </motion.article>
             ))}
           </div>
         </section>
 
-        <aside className="space-y-4">
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <AnimatePresence initial={!shouldReduceMotion}>
             {lastOrder ? (
               <motion.section
@@ -253,23 +413,23 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
                 animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
                 exit={shouldReduceMotion ? undefined : { opacity: 0, y: -6 }}
                 transition={{ duration: 0.2 }}
-                className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-stone-200"
+                className="rounded-lg bg-white p-4 shadow-sm shadow-stone-300/50 ring-1 ring-stone-200"
               >
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="font-semibold">Latest order</h2>
+                  <h2 className="font-semibold">{t("latestOrderLabel")}</h2>
                   <StatusPill status={lastOrder.status} />
                 </div>
                 <p className="text-sm text-stone-600">
-                  Order total {formatCurrency(lastOrder.totalCents)}
+                  {t("orderTotal")} {formatCurrency(lastOrder.totalCents)}
                 </p>
               </motion.section>
             ) : null}
           </AnimatePresence>
 
-          <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-stone-200">
+          <section className="rounded-lg bg-white p-4 shadow-sm shadow-stone-300/50 ring-1 ring-stone-200">
             <div className="mb-3 flex items-center gap-2">
-              <ReceiptText size={18} aria-hidden="true" />
-              <h2 className="font-semibold">This table history</h2>
+              <ReceiptText className="text-amber-800" size={18} aria-hidden="true" />
+              <h2 className="font-semibold">{t("thisTableHistory")}</h2>
             </div>
             <div className="space-y-2">
               {tableOrders.length ? (
@@ -282,7 +442,7 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
                       delay: shouldReduceMotion ? 0 : Math.min(index * 0.025, 0.12),
                       duration: 0.18,
                     }}
-                    className="flex items-center justify-between rounded-xl bg-stone-50 px-3 py-2"
+                    className="flex items-center justify-between rounded-md bg-stone-50 px-3 py-2 ring-1 ring-stone-100"
                   >
                     <div>
                       <p className="text-sm font-medium">{formatCurrency(order.totalCents)}</p>
@@ -294,102 +454,38 @@ export function CustomerOrdering({ tableToken }: CustomerOrderingProps) {
                   </motion.div>
                 ))
               ) : (
-                <p className="text-sm text-stone-500">No orders for this table yet.</p>
+                <p className="text-sm text-stone-500">{t("noOrdersForTable")}</p>
               )}
             </div>
           </section>
         </aside>
       </div>
 
-      <section className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white p-4 shadow-2xl">
-        <div className="mx-auto grid max-w-6xl gap-3 lg:grid-cols-[1fr_auto]">
-          <div>
-            <div className="mb-2 flex items-center gap-2">
-              <ShoppingCart size={18} aria-hidden="true" />
-              <h2 className="font-semibold">Cart</h2>
-              <span className="text-sm text-stone-500">
-                {cart.reduce((sum, item) => sum + item.quantity, 0)} items
+      <section className="fixed inset-x-0 bottom-0 z-30 border-t border-stone-200 bg-white/96 p-4 shadow-2xl shadow-stone-950/15 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="text-amber-800" size={18} aria-hidden="true" />
+              <h2 className="font-semibold">{t("cart")}</h2>
+              <span className="rounded-full bg-stone-100 px-2 py-0.5 text-sm text-stone-600">
+                {cart.reduce((sum, item) => sum + item.quantity, 0)} {t("items")}
               </span>
             </div>
-
-            <div className="max-h-32 space-y-2 overflow-y-auto pr-1">
-              <AnimatePresence initial={!shouldReduceMotion}>
-                {cartLines.length ? (
-                  cartLines.map((line, index) => (
-                  <motion.div
-                    key={`${line.cartItem.menuItemId}-${line.cartItem.optionIds.join("-")}`}
-                    layout
-                    initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
-                    animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-                    exit={shouldReduceMotion ? undefined : { opacity: 0, x: 24 }}
-                    transition={{ duration: 0.18 }}
-                    className="grid gap-2 rounded-xl bg-stone-50 p-3 sm:grid-cols-[1fr_auto]"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold">{line.item?.name}</p>
-                      <p className="text-xs text-stone-500">
-                        {line.selectedOptions.map((option) => option.name).join(", ") ||
-                          "Standard"}
-                      </p>
-                      <input
-                        value={line.cartItem.note}
-                        onChange={(event) => updateNote(index, event.target.value)}
-                        placeholder="Kitchen note"
-                        className="mt-2 h-10 w-full rounded-lg border border-stone-200 px-3 text-sm outline-none focus:border-stone-950"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:justify-end">
-                      <div className="flex items-center rounded-full bg-white ring-1 ring-stone-200">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(index, -1)}
-                          className="flex size-10 items-center justify-center"
-                          aria-label="Decrease quantity"
-                        >
-                          <Minus size={16} aria-hidden="true" />
-                        </button>
-                        <span className="w-8 text-center text-sm font-semibold">
-                          {line.cartItem.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(index, 1)}
-                          className="flex size-10 items-center justify-center"
-                          aria-label="Increase quantity"
-                        >
-                          <Plus size={16} aria-hidden="true" />
-                        </button>
-                      </div>
-                      <p className="w-20 text-right text-sm font-semibold">
-                        {formatCurrency(line.lineTotal)}
-                      </p>
-                    </div>
-                  </motion.div>
-                  ))
-                ) : (
-                  <motion.p
-                    key="empty-cart"
-                    initial={shouldReduceMotion ? false : { opacity: 0 }}
-                    animate={shouldReduceMotion ? undefined : { opacity: 1 }}
-                    exit={shouldReduceMotion ? undefined : { opacity: 0 }}
-                    className="text-sm text-stone-500"
-                  >
-                    Add menu items to start an order.
-                  </motion.p>
-                )}
-              </AnimatePresence>
-            </div>
-
+            <p className="mt-1 text-sm text-stone-500">
+              {cartLines.length
+                ? `${t("total")} ${formatCurrency(cartSubtotal)}`
+                : t("addItemsToStart")}
+            </p>
             {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
           </div>
 
           <button
             type="button"
-            disabled={!cart.length || isSubmitting}
-            onClick={() => void placeOrder()}
-            className="h-14 rounded-xl bg-emerald-700 px-6 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-stone-300"
+            disabled={!cart.length}
+            onClick={() => setIsReviewing(true)}
+            className="h-14 rounded-md bg-emerald-700 px-6 text-sm font-semibold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:shadow-none"
           >
-            {isSubmitting ? "Sending..." : `Place order ${formatCurrency(cartSubtotal)}`}
+            {`${t("reviewOrder")} ${formatCurrency(cartSubtotal)}`}
           </button>
         </div>
       </section>

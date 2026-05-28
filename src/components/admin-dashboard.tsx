@@ -40,6 +40,14 @@ import {
   uploadMenuImage,
 } from "@/lib/store";
 import { createBrowserSupabaseClient } from "@/lib/supabase";
+import {
+  translateCategory,
+  translateMenuItem,
+  translateMenuItemSnapshot,
+  translatePaymentMethod,
+  translateStatus,
+  translateTableName,
+} from "@/lib/i18n";
 import type {
   MenuItem,
   MenuMasterState,
@@ -48,6 +56,8 @@ import type {
   PaymentMethod,
   TableSessionSummary,
 } from "@/lib/types";
+import { LanguageSwitcher } from "./language-switcher";
+import { useLanguage } from "./language-provider";
 import { StatusPill } from "./status-pill";
 
 const statuses: OrderStatus[] = [
@@ -59,20 +69,30 @@ const statuses: OrderStatus[] = [
   "paid",
   "cancelled",
 ];
+const orderBoardStatuses: OrderStatus[] = ["new", "accepted", "preparing", "ready", "served"];
 const MAX_MENU_IMAGE_BYTES = 1_500_000;
 
 type AdminTab = "orders" | "pos" | "menu" | "history" | "tables";
 
+const panelClass =
+  "rounded-lg bg-white p-4 shadow-sm shadow-stone-300/50 ring-1 ring-stone-200";
+const quietPanelClass = "rounded-md bg-stone-50 p-3 ring-1 ring-stone-100";
+const inputClass =
+  "h-11 w-full rounded-md border border-stone-300 bg-white px-3 outline-none transition focus:border-stone-950 focus:ring-4 focus:ring-amber-500/20";
+const secondaryButtonClass =
+  "rounded-md bg-white px-3 text-sm font-semibold text-stone-700 ring-1 ring-stone-200 transition hover:bg-stone-50";
+
 export function AdminDashboard() {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
+  const { language, t } = useLanguage();
   const [state, setState] = useState<MenuMasterState | null>(null);
   const [tableSessions, setTableSessions] = useState<TableSessionSummary[]>([]);
   const [activeTab, setActiveTab] = useState<AdminTab>("orders");
   const [selectedOrderId, setSelectedOrderId] = useState("");
   const [editingMenuItemId, setEditingMenuItemId] = useState("");
   const [discount, setDiscount] = useState("0");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [paymentMethod] = useState<PaymentMethod>("cash");
   const [error, setError] = useState("");
 
   const refresh = useCallback(async () => {
@@ -122,6 +142,12 @@ export function AdminDashboard() {
   const editingMenuItem = state?.menuItems.find((item) => item.id === editingMenuItemId);
   const dailyRevenue = state ? revenueToday(state.orders) : 0;
   const itemSales = state ? salesByMenuItem(state.orders) : [];
+  const activeTableCount = tableSessions.filter((table) => table.status === "open").length;
+  const readyOrderCount = state ? orderCountByStatus(state.orders, "ready") : 0;
+  const kitchenQueueCount = state
+    ? state.orders.filter((order) => ["new", "accepted", "preparing"].includes(order.status))
+        .length
+    : 0;
 
   async function handleStatus(orderId: string, status: OrderStatus) {
     setError("");
@@ -129,7 +155,7 @@ export function AdminDashboard() {
       await updateOrderStatus(orderId, status);
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to update order.");
+      setError(caught instanceof Error ? caught.message : t("unableToUpdateOrder"));
     }
   }
 
@@ -143,11 +169,11 @@ export function AdminDashboard() {
       await checkoutOrder(
         selectedOrder.id,
         paymentMethod,
-        Math.round(Number(discount || "0") * 100),
+        Math.round(Number(discount || "0")),
       );
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to record payment.");
+      setError(caught instanceof Error ? caught.message : t("unableToRecordPayment"));
     }
   }
 
@@ -157,7 +183,7 @@ export function AdminDashboard() {
       await updateMenuAvailability(item.id, !item.isAvailable);
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to update menu.");
+      setError(caught instanceof Error ? caught.message : t("unableToUpdateMenu"));
     }
   }
 
@@ -167,7 +193,7 @@ export function AdminDashboard() {
       await openTableSession(tableId);
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to open table.");
+      setError(caught instanceof Error ? caught.message : t("unableToOpenTable"));
     }
   }
 
@@ -177,7 +203,7 @@ export function AdminDashboard() {
       await closeTableSession(tableId);
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to close table.");
+      setError(caught instanceof Error ? caught.message : t("unableToCloseTable"));
     }
   }
 
@@ -187,7 +213,7 @@ export function AdminDashboard() {
       await resetTableSession(tableId);
       await refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to reset table.");
+      setError(caught instanceof Error ? caught.message : t("unableToResetTable"));
     }
   }
 
@@ -219,7 +245,7 @@ export function AdminDashboard() {
       !price ||
       (!imageChoiceId && !uploadedImageUrl && !imageFile && !id)
     ) {
-      setError("Menu item name, category, price, and image are required.");
+      setError(t("requiredMenuFields"));
       return false;
     }
 
@@ -245,7 +271,7 @@ export function AdminDashboard() {
       await refresh();
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to save menu item.");
+      setError(caught instanceof Error ? caught.message : t("unableToSaveMenu"));
       return false;
     }
   }
@@ -256,48 +282,52 @@ export function AdminDashboard() {
   }
 
   if (!state) {
-    return <main className="min-h-dvh bg-slate-100 p-6">Loading admin...</main>;
+    return <main className="min-h-dvh bg-[#f6f1e8] p-6">{t("loadingAdmin")}</main>;
   }
 
   const tabs: Array<{ id: AdminTab; label: string; icon: React.ElementType }> = [
-    { id: "orders", label: "Orders", icon: ClipboardList },
-    { id: "pos", label: "POS", icon: Banknote },
-    { id: "menu", label: "Menu", icon: Settings2 },
-    { id: "history", label: "History", icon: History },
-    { id: "tables", label: "Tables", icon: QrCode },
+    { id: "orders", label: t("orders"), icon: ClipboardList },
+    { id: "pos", label: t("pos"), icon: Banknote },
+    { id: "menu", label: t("menu"), icon: Settings2 },
+    { id: "history", label: t("history"), icon: History },
+    { id: "tables", label: t("tables"), icon: QrCode },
   ];
 
   return (
-    <main className="min-h-dvh bg-slate-100 text-slate-950">
-      <header className="border-b border-slate-200 bg-white px-4 py-4">
+    <main className="min-h-dvh bg-[#f6f1e8] text-stone-950">
+      <header className="border-b border-stone-200/80 bg-white/88 px-4 py-4 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Admin dashboard</p>
-            <h1 className="text-2xl font-semibold">{state.restaurant.name}</h1>
+            <p className="text-sm font-semibold text-amber-800">{t("adminDashboard")}</p>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {state.restaurant.name}
+            </h1>
+            <p className="text-sm text-stone-600">{t("dashboardDescription")}</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <LanguageSwitcher />
             <button
               type="button"
               onClick={() => void refresh()}
-              className="flex h-11 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-semibold text-slate-700"
+              className="flex h-11 items-center gap-2 rounded-md bg-stone-100 px-3 text-sm font-semibold text-stone-700 ring-1 ring-stone-200 transition hover:bg-white"
             >
               <RefreshCw size={16} aria-hidden="true" />
-              Refresh
+              {t("refresh")}
             </button>
             <button
               type="button"
               onClick={() => void handleSignOut()}
-              className="flex h-11 items-center gap-2 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white"
+              className="flex h-11 items-center gap-2 rounded-md bg-stone-950 px-3 text-sm font-semibold text-white transition hover:bg-stone-800"
             >
               <LogOut size={16} aria-hidden="true" />
-              Sign out
+              {t("signOut")}
             </button>
           </div>
         </div>
       </header>
 
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[220px_1fr]">
-        <nav className="flex gap-2 overflow-x-auto lg:block lg:space-y-2">
+        <nav className="flex gap-2 overflow-x-auto rounded-lg bg-stone-900 p-2 shadow-xl shadow-stone-950/10 lg:block lg:space-y-2 lg:self-start">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -305,10 +335,10 @@ export function AdminDashboard() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex h-12 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition lg:w-full ${
+                className={`flex h-12 shrink-0 items-center gap-2 rounded-md px-4 text-sm font-semibold transition lg:w-full ${
                   activeTab === tab.id
-                    ? "bg-slate-950 text-white"
-                    : "bg-white text-slate-700 ring-1 ring-slate-200"
+                    ? "bg-amber-400 text-stone-950 shadow-lg shadow-amber-950/20"
+                    : "text-stone-300 hover:bg-white/8 hover:text-white"
                 }`}
               >
                 <Icon size={18} aria-hidden="true" />
@@ -318,12 +348,32 @@ export function AdminDashboard() {
           })}
         </nav>
 
-        <section className="space-y-4">
+        <section className="min-w-0 space-y-4">
           {error ? (
-            <div className="rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-700 ring-1 ring-rose-200">
+            <div className="rounded-md bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 ring-1 ring-rose-200">
               {error}
             </div>
           ) : null}
+
+          <section className="rounded-lg bg-stone-950 p-4 text-white shadow-xl shadow-stone-950/10">
+            <div className="mb-4 flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+              <div>
+                <p className="text-sm font-semibold text-amber-300">
+                  {t("floorOverview")}
+                </p>
+                <h2 className="text-xl font-semibold">{t("kitchenQueue")}</h2>
+              </div>
+              <div className="rounded-md bg-white/10 px-3 py-2 text-sm text-stone-200 ring-1 ring-white/10">
+                {t("needsAttention")}: {kitchenQueueCount}
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-4">
+              <MetricCard label={t("openOrders")} value={String(unpaidOrders.length)} />
+              <MetricCard label={t("activeTables")} value={String(activeTableCount)} />
+              <MetricCard label={t("readyNow")} value={String(readyOrderCount)} />
+              <MetricCard label={t("todayRevenue")} value={formatCurrency(dailyRevenue)} />
+            </div>
+          </section>
 
           <div className="grid gap-3 md:grid-cols-4">
             {(["new", "preparing", "ready", "paid"] as OrderStatus[]).map((status, index) => (
@@ -335,9 +385,11 @@ export function AdminDashboard() {
                   delay: shouldReduceMotion ? 0 : index * 0.04,
                   duration: 0.2,
                 }}
-                className="rounded-2xl bg-white p-4 ring-1 ring-slate-200"
+                className="rounded-lg bg-white p-4 shadow-sm shadow-stone-300/50 ring-1 ring-stone-200"
               >
-                <p className="text-sm font-medium capitalize text-slate-500">{status}</p>
+                <p className="text-sm font-semibold capitalize text-stone-500">
+                  {translateStatus(language, status)}
+                </p>
                 <p className="mt-2 text-3xl font-semibold">
                   {orderCountByStatus(state.orders, status)}
                 </p>
@@ -372,7 +424,6 @@ export function AdminDashboard() {
                   paymentMethod={paymentMethod}
                   selectedOrder={selectedOrder}
                   setDiscount={setDiscount}
-                  setPaymentMethod={setPaymentMethod}
                   setSelectedOrderId={setSelectedOrderId}
                   onCheckout={handleCheckout}
                 />
@@ -437,13 +488,21 @@ export function AdminDashboard() {
   );
 }
 
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-white/8 p-3 ring-1 ring-white/10">
+      <p className="text-xs font-semibold uppercase text-stone-400">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
 function PosPanel({
   discount,
   orders,
   paymentMethod,
   selectedOrder,
   setDiscount,
-  setPaymentMethod,
   setSelectedOrderId,
   onCheckout,
 }: {
@@ -452,16 +511,20 @@ function PosPanel({
   paymentMethod: PaymentMethod;
   selectedOrder?: Order;
   setDiscount: (value: string) => void;
-  setPaymentMethod: (value: PaymentMethod) => void;
   setSelectedOrderId: (value: string) => void;
   onCheckout: () => Promise<void>;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { language, t } = useLanguage();
 
   return (
-    <section className="grid gap-4 lg:grid-cols-[320px_1fr]">
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <h2 className="mb-3 text-lg font-semibold">Open orders</h2>
+    <section className="grid gap-4 lg:grid-cols-[360px_1fr]">
+      <div className={panelClass}>
+        <div className="mb-4">
+          <p className="text-sm font-semibold text-amber-800">{t("counterCheckout")}</p>
+          <h2 className="text-lg font-semibold">{t("openOrders")}</h2>
+          <p className="text-sm text-stone-500">{t("selectOrder")}</p>
+        </div>
         <div className="space-y-2">
           {orders.map((order, index) => (
             <motion.button
@@ -476,66 +539,64 @@ function PosPanel({
               }}
               type="button"
               onClick={() => setSelectedOrderId(order.id)}
-              className={`w-full rounded-xl p-3 text-left ring-1 ${
+              className={`w-full rounded-md p-3 text-left ring-1 transition ${
                 selectedOrder?.id === order.id
-                  ? "bg-slate-950 text-white ring-slate-950"
-                  : "bg-slate-50 ring-slate-200"
+                  ? "bg-stone-950 text-white ring-stone-950"
+                  : "bg-stone-50 ring-stone-200 hover:bg-white"
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold">{order.tableName}</p>
+                <p className="font-semibold">
+                  {translateTableName(language, order.tableName)}
+                </p>
                 <span>{formatCurrency(order.totalCents)}</span>
               </div>
               <p className="mt-1 text-xs opacity-70">
-                {order.items.length} lines - {order.status}
+                {order.items.length} {t("lines")} - {translateStatus(language, order.status)}
               </p>
             </motion.button>
           ))}
         </div>
       </div>
 
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <h2 className="mb-4 text-lg font-semibold">Checkout</h2>
+      <div className={panelClass}>
+        <h2 className="mb-4 text-lg font-semibold">{t("counterCheckout")}</h2>
         {selectedOrder ? (
           <div className="space-y-4">
             <Receipt order={selectedOrder} />
             <div className="grid gap-3 sm:grid-cols-2">
               <label>
-                <span className="mb-1 block text-sm font-medium">Discount</span>
+                <span className="mb-1 block text-sm font-semibold text-stone-700">
+                  {t("discount")}
+                </span>
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={discount}
                   onChange={(event) => setDiscount(event.target.value)}
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3"
+                  className={inputClass}
                 />
               </label>
               <label>
-                <span className="mb-1 block text-sm font-medium">Payment</span>
-                <select
-                  value={paymentMethod}
-                  onChange={(event) =>
-                    setPaymentMethod(event.target.value as PaymentMethod)
-                  }
-                  className="h-11 w-full rounded-lg border border-slate-300 px-3"
-                >
-                  <option value="cash">Cash</option>
-                  <option value="card">Card</option>
-                  <option value="qr_transfer">QR transfer</option>
-                </select>
+                <span className="mb-1 block text-sm font-semibold text-stone-700">
+                  {t("payment")}
+                </span>
+                <div className="flex h-11 items-center rounded-md border border-stone-300 bg-stone-50 px-3 text-sm font-semibold text-stone-800">
+                  {translatePaymentMethod(language, paymentMethod)} - {t("cashOnly")}
+                </div>
               </label>
             </div>
             <button
               type="button"
               onClick={() => void onCheckout()}
-              className="h-12 w-full rounded-xl bg-emerald-700 text-sm font-semibold text-white hover:bg-emerald-800"
+              className="h-12 w-full rounded-md bg-emerald-700 text-sm font-semibold text-white shadow-lg shadow-emerald-900/15 transition hover:bg-emerald-800"
             >
-              Mark paid
+              {t("markPaid")}
             </button>
           </div>
         ) : (
-          <p className="text-sm text-slate-500">No open orders to checkout.</p>
+          <p className="text-sm text-stone-500">{t("noOpenOrders")}</p>
         )}
       </div>
     </section>
@@ -558,6 +619,7 @@ function MenuPanel({
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<boolean>;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { language, t } = useLanguage();
   const formKey = editingMenuItem?.id ?? "new-menu-item";
   const [uploadedImage, setUploadedImage] = useState<{
     formKey: string;
@@ -586,14 +648,14 @@ function MenuPanel({
     }
 
     if (!file.type.startsWith("image/")) {
-      setImageUploadError({ formKey, message: "Choose an image file." });
+      setImageUploadError({ formKey, message: t("chooseImageFile") });
       return;
     }
 
     if (file.size > MAX_MENU_IMAGE_BYTES) {
       setImageUploadError({
         formKey,
-        message: "Choose an image smaller than 1.5 MB for this demo.",
+        message: t("imageTooLarge"),
       });
       return;
     }
@@ -611,9 +673,9 @@ function MenuPanel({
 
   return (
     <section className="grid gap-4 xl:grid-cols-[1fr_420px]">
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <h2 className="mb-4 text-lg font-semibold">Menu items</h2>
-        <div className="divide-y divide-slate-100">
+      <div className={panelClass}>
+        <h2 className="mb-4 text-lg font-semibold">{t("menuItems")}</h2>
+        <div className="divide-y divide-stone-100">
           {menuItems.map((item, index) => (
             <motion.div
               key={item.id}
@@ -626,23 +688,27 @@ function MenuPanel({
               }}
               className="grid gap-3 py-3 md:grid-cols-[56px_1fr_auto] md:items-center"
             >
+              {(() => {
+                const translatedItem = translateMenuItem(language, item);
+                return (
+                  <>
               <div
-                className="size-14 rounded-xl bg-cover bg-center ring-1 ring-slate-200"
+                className="size-14 rounded-md bg-cover bg-center ring-1 ring-stone-200"
                 style={{ backgroundImage: `url(${item.imageUrl})` }}
               />
               <div className="min-w-0">
-                <p className="font-semibold">{item.name}</p>
-                <p className="line-clamp-1 text-sm text-slate-500">
-                  {formatCurrency(item.priceCents)} - {item.description}
+                <p className="font-semibold">{translatedItem.name}</p>
+                <p className="line-clamp-1 text-sm text-stone-500">
+                  {formatCurrency(item.priceCents)} - {translatedItem.description}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => onEdit(item.id)}
-                  className="h-10 rounded-lg bg-slate-100 px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200"
+                  className={`h-10 ${secondaryButtonClass}`}
                 >
-                  Edit
+                  {t("edit")}
                 </button>
                 <button
                   type="button"
@@ -653,9 +719,12 @@ function MenuPanel({
                       : "bg-rose-50 text-rose-800 ring-1 ring-rose-200"
                   }`}
                 >
-                  {item.isAvailable ? "Available" : "Out of stock"}
+                  {item.isAvailable ? t("available") : t("outOfStock")}
                 </button>
               </div>
+                  </>
+                );
+              })()}
             </motion.div>
           ))}
         </div>
@@ -667,89 +736,91 @@ function MenuPanel({
         animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
         onSubmit={(event) => void handleSubmit(event)}
-        className="rounded-2xl bg-white p-4 ring-1 ring-slate-200"
+        className={panelClass}
       >
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Plus size={18} aria-hidden="true" />
             <h2 className="text-lg font-semibold">
-              {editingMenuItem ? "Edit menu item" : "Add menu item"}
+              {editingMenuItem ? t("editMenuItem") : t("addMenuItem")}
             </h2>
           </div>
           {editingMenuItem ? (
             <button
               type="button"
               onClick={() => onEdit("")}
-              className="h-9 rounded-lg bg-slate-100 px-3 text-sm font-semibold text-slate-700"
+              className={`h-9 ${secondaryButtonClass}`}
             >
-              New item
+              {t("newItem")}
             </button>
           ) : null}
         </div>
         <input type="hidden" name="id" value={editingMenuItem?.id ?? ""} />
-        <Field name="name" label="Name" defaultValue={editingMenuItem?.name} />
+        <Field name="name" label={t("name")} defaultValue={editingMenuItem?.name} />
         <Field
           name="price"
-          label="Price"
+          label={t("priceMmk")}
           type="number"
-          step="0.01"
-          defaultValue={editingMenuItem ? String(editingMenuItem.priceCents / 100) : undefined}
+          step="1"
+          defaultValue={editingMenuItem ? String(editingMenuItem.priceCents) : undefined}
         />
         <label className="mb-3 block">
-          <span className="mb-1 block text-sm font-medium">Category</span>
+          <span className="mb-1 block text-sm font-semibold text-stone-700">
+            {t("category")}
+          </span>
           <select
             name="categoryId"
             defaultValue={editingMenuItem?.categoryId}
-            className="h-11 w-full rounded-lg border border-slate-300 px-3"
+            className={inputClass}
           >
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
-                {category.name}
+                {translateCategory(language, category.id, category.name)}
               </option>
             ))}
           </select>
         </label>
         <Field
           name="description"
-          label="Description"
+          label={t("description")}
           defaultValue={editingMenuItem?.description}
         />
         <input type="hidden" name="uploadedImageUrl" value={uploadedImageUrl} />
         <fieldset className="mb-3">
-          <legend className="mb-2 flex items-center gap-2 text-sm font-medium">
+          <legend className="mb-2 flex items-center gap-2 text-sm font-semibold text-stone-700">
             <ImageIcon size={16} aria-hidden="true" />
-            Image
+            {t("image")}
           </legend>
-          <div className="mb-3 rounded-xl border border-dashed border-slate-300 p-3">
+          <div className="mb-3 rounded-lg border border-dashed border-stone-300 bg-stone-50 p-3">
             <div
-              className="mb-3 h-36 rounded-lg bg-cover bg-center ring-1 ring-slate-200"
+              className="mb-3 h-36 rounded-md bg-cover bg-center ring-1 ring-stone-200"
               style={{ backgroundImage: `url(${previewImageUrl})` }}
               aria-label="Selected menu image preview"
             />
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold">Upload image</span>
+              <span className="mb-2 block text-sm font-semibold">{t("uploadImage")}</span>
               <input
                 type="file"
                 name="imageFile"
                 accept="image/*"
                 onChange={(event) => void handleImageUpload(event.target.files?.[0])}
-                className="block w-full text-sm text-slate-700 file:mr-3 file:h-10 file:rounded-lg file:border-0 file:bg-slate-950 file:px-3 file:text-sm file:font-semibold file:text-white"
+                className="block w-full text-sm text-stone-700 file:mr-3 file:h-10 file:rounded-md file:border-0 file:bg-stone-950 file:px-3 file:text-sm file:font-semibold file:text-white"
               />
             </label>
             {uploadedImageUrl ? (
               <button
                 type="button"
                 onClick={() => setUploadedImage(null)}
-                className="mt-2 h-9 rounded-lg bg-slate-100 px-3 text-sm font-semibold text-slate-700"
+                className={`mt-2 h-9 ${secondaryButtonClass}`}
               >
-                Use preset instead
+                {t("usePreset")}
               </button>
             ) : null}
             {currentImageUploadError ? (
               <p className="mt-2 text-sm text-rose-700">{currentImageUploadError}</p>
             ) : (
-              <p className="mt-2 text-xs text-slate-500">
-                Uploaded images are stored in Supabase Storage when connected.
+              <p className="mt-2 text-xs text-stone-500">
+                {t("uploadHint")}
               </p>
             )}
           </div>
@@ -757,7 +828,7 @@ function MenuPanel({
             {menuImageChoices.map((choice) => (
               <label
                 key={choice.id}
-                className="cursor-pointer rounded-xl border border-slate-200 p-2 has-[:checked]:border-slate-950 has-[:checked]:ring-2 has-[:checked]:ring-slate-950/10"
+                className="cursor-pointer rounded-lg border border-stone-200 bg-white p-2 has-[:checked]:border-stone-950 has-[:checked]:ring-2 has-[:checked]:ring-amber-500/20"
               >
                 <input
                   className="sr-only"
@@ -767,7 +838,7 @@ function MenuPanel({
                   defaultChecked={selectedPresetId === choice.id}
                 />
                 <span
-                  className="mb-2 block h-20 rounded-lg bg-cover bg-center"
+                  className="mb-2 block h-20 rounded-md bg-cover bg-center"
                   style={{ backgroundImage: `url(${choice.url})` }}
                 />
                 <span className="block text-xs font-semibold">{choice.label}</span>
@@ -775,8 +846,8 @@ function MenuPanel({
             ))}
           </div>
         </fieldset>
-        <button className="mt-2 h-11 w-full rounded-lg bg-slate-950 text-sm font-semibold text-white">
-          {editingMenuItem ? "Save changes" : "Save item"}
+        <button className="mt-2 h-11 w-full rounded-md bg-stone-950 text-sm font-semibold text-white transition hover:bg-stone-800">
+          {editingMenuItem ? t("saveChanges") : t("saveItem")}
         </button>
       </motion.form>
     </section>
@@ -800,82 +871,118 @@ function OrderBoard({
   onStatus: (orderId: string, status: OrderStatus) => Promise<void>;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { language, t } = useLanguage();
+  const activeOrders = orders.filter(
+    (order) => !["paid", "cancelled"].includes(order.status),
+  );
 
   return (
-    <section className="grid gap-4 xl:grid-cols-3">
-      {orders.map((order, index) => (
-        <motion.article
-          key={order.id}
-          layout
-          initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
-          animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-          whileHover={shouldReduceMotion ? undefined : { y: -2 }}
-          transition={{
-            delay: shouldReduceMotion ? 0 : Math.min(index * 0.035, 0.18),
-            duration: 0.2,
-          }}
-          className="rounded-2xl bg-white p-4 ring-1 ring-slate-200"
-        >
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <p className="text-lg font-semibold">{order.tableName}</p>
-              <p className="text-sm text-slate-500">
-                {new Date(order.createdAt).toLocaleTimeString()}
-              </p>
-            </div>
-            <StatusPill status={order.status} />
-          </div>
+    <section className="flex gap-3 overflow-x-auto pb-2">
+      {orderBoardStatuses.map((status) => {
+        const statusOrders = activeOrders.filter((order) => order.status === status);
 
-          <div className="mb-4 space-y-2">
-            {order.items.map((item) => (
-              <div key={item.id} className="rounded-xl bg-slate-50 p-3">
-                <div className="flex justify-between gap-3">
-                  <p className="font-medium">
-                    {item.quantity}x {item.name}
-                  </p>
-                  <p className="font-semibold">{formatCurrency(item.lineTotalCents)}</p>
-                </div>
-                {item.selectedOptions.length ? (
-                  <p className="mt-1 text-xs text-slate-500">
-                    {item.selectedOptions.map((option) => option.name).join(", ")}
-                  </p>
-                ) : null}
-                {item.note ? <p className="mt-1 text-xs text-amber-700">{item.note}</p> : null}
-              </div>
-            ))}
-          </div>
-
-          <div className="mb-4 flex items-center justify-between border-t border-slate-100 pt-3">
-            <span className="text-sm text-slate-500">Total</span>
-            <span className="text-lg font-semibold">{formatCurrency(order.totalCents)}</span>
-          </div>
-
-          <select
-            value={order.status}
-            onChange={(event) =>
-              void onStatus(order.id, event.target.value as OrderStatus)
-            }
-            className="h-11 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold"
-            aria-label={`Change status for ${order.tableName}`}
+        return (
+          <div
+            key={status}
+            className="min-h-64 w-[280px] shrink-0 rounded-lg bg-white/70 p-3 ring-1 ring-stone-200"
           >
-            {statuses.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        </motion.article>
-      ))}
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold capitalize text-stone-700">
+                {translateStatus(language, status)}
+              </h2>
+              <span className="rounded-md bg-stone-100 px-2 py-1 text-xs font-semibold text-stone-600">
+                {statusOrders.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {statusOrders.map((order, index) => (
+                <motion.article
+                  key={order.id}
+                  layout
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+                  animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                  whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+                  transition={{
+                    delay: shouldReduceMotion ? 0 : Math.min(index * 0.035, 0.18),
+                    duration: 0.2,
+                  }}
+                  className="rounded-lg bg-white p-3 shadow-sm shadow-stone-300/50 ring-1 ring-stone-200"
+                >
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold">
+                        {translateTableName(language, order.tableName)}
+                      </p>
+                      <p className="text-xs text-stone-500">
+                        {new Date(order.createdAt).toLocaleTimeString()}
+                      </p>
+                    </div>
+                    <StatusPill status={order.status} />
+                  </div>
 
-      {!orders.length ? (
+                  <div className="mb-3 space-y-2">
+                    {order.items.map((item) => (
+                      <div key={item.id} className={quietPanelClass}>
+                        <div className="flex justify-between gap-3">
+                          <p className="text-sm font-medium">
+                            {item.quantity}x{" "}
+                            {translateMenuItemSnapshot(
+                              language,
+                              item.menuItemId,
+                              item.name,
+                            )}
+                          </p>
+                          <p className="text-sm font-semibold">
+                            {formatCurrency(item.lineTotalCents)}
+                          </p>
+                        </div>
+                        {item.selectedOptions.length ? (
+                          <p className="mt-1 text-xs text-stone-500">
+                            {item.selectedOptions.map((option) => option.name).join(", ")}
+                          </p>
+                        ) : null}
+                        {item.note ? (
+                          <p className="mt-1 text-xs text-amber-700">{item.note}</p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mb-3 flex items-center justify-between border-t border-stone-100 pt-3">
+                    <span className="text-sm text-stone-500">{t("total")}</span>
+                    <span className="font-semibold">{formatCurrency(order.totalCents)}</span>
+                  </div>
+
+                  <select
+                    value={order.status}
+                    onChange={(event) =>
+                      void onStatus(order.id, event.target.value as OrderStatus)
+                    }
+                    className={`${inputClass} text-sm font-semibold`}
+                    aria-label={`${t("changeStatus")} ${translateTableName(language, order.tableName)}`}
+                  >
+                    {statuses.map((nextStatus) => (
+                      <option key={nextStatus} value={nextStatus}>
+                        {translateStatus(language, nextStatus)}
+                      </option>
+                    ))}
+                  </select>
+                </motion.article>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {!activeOrders.length ? (
         <motion.div
           initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
           animate={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-          className="rounded-2xl bg-white p-6 text-center ring-1 ring-slate-200"
+          className="w-full rounded-lg bg-white p-6 text-center shadow-sm shadow-stone-300/50 ring-1 ring-stone-200"
         >
-          <ChefHat className="mx-auto mb-2 text-slate-400" aria-hidden="true" />
-          <p className="font-semibold">No orders yet</p>
-          <p className="text-sm text-slate-500">New QR orders will appear here.</p>
+          <ChefHat className="mx-auto mb-2 text-stone-400" aria-hidden="true" />
+          <p className="font-semibold">{t("noOrdersYet")}</p>
+          <p className="text-sm text-stone-500">{t("newQrOrdersAppear")}</p>
         </motion.div>
       ) : null}
     </section>
@@ -892,11 +999,12 @@ function HistoryPanel({
   orders: Order[];
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { language, t } = useLanguage();
 
   return (
     <section className="grid gap-4 lg:grid-cols-[1fr_340px]">
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <h2 className="mb-4 text-lg font-semibold">Order history</h2>
+      <div className={panelClass}>
+        <h2 className="mb-4 text-lg font-semibold">{t("orderHistory")}</h2>
         <div className="space-y-2">
           {orders.map((order, index) => (
             <motion.div
@@ -907,11 +1015,13 @@ function HistoryPanel({
                 delay: shouldReduceMotion ? 0 : Math.min(index * 0.02, 0.16),
                 duration: 0.18,
               }}
-              className="grid gap-3 rounded-xl bg-slate-50 p-3 md:grid-cols-[1fr_auto_auto]"
+              className="grid gap-3 rounded-md bg-stone-50 p-3 ring-1 ring-stone-100 md:grid-cols-[1fr_auto_auto]"
             >
               <div>
-                <p className="font-semibold">{order.tableName}</p>
-                <p className="text-sm text-slate-500">
+                <p className="font-semibold">
+                  {translateTableName(language, order.tableName)}
+                </p>
+                <p className="text-sm text-stone-500">
                   {new Date(order.createdAt).toLocaleString()}
                 </p>
               </div>
@@ -921,8 +1031,8 @@ function HistoryPanel({
           ))}
         </div>
       </div>
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-        <h2 className="mb-2 text-lg font-semibold">Sales summary</h2>
+      <div className={panelClass}>
+        <h2 className="mb-2 text-lg font-semibold">{t("salesSummary")}</h2>
         <p className="mb-4 text-3xl font-semibold">{formatCurrency(dailyRevenue)}</p>
         <div className="space-y-2">
           {itemSales.map((item, index) => (
@@ -934,11 +1044,13 @@ function HistoryPanel({
                 delay: shouldReduceMotion ? 0 : Math.min(index * 0.02, 0.14),
                 duration: 0.18,
               }}
-              className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2"
+              className="flex items-center justify-between rounded-md bg-stone-50 px-3 py-2 ring-1 ring-stone-100"
             >
               <div>
                 <p className="text-sm font-semibold">{item.name}</p>
-                <p className="text-xs text-slate-500">{item.quantity} sold</p>
+                <p className="text-xs text-stone-500">
+                  {item.quantity} {t("sold")}
+                </p>
               </div>
               <span className="text-sm font-semibold">
                 {formatCurrency(item.revenueCents)}
@@ -963,6 +1075,7 @@ function TablesPanel({
   onReset: (tableId: string) => Promise<void>;
 }) {
   const shouldReduceMotion = useReducedMotion();
+  const { language, t } = useLanguage();
 
   return (
     <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -982,46 +1095,48 @@ function TablesPanel({
               delay: shouldReduceMotion ? 0 : Math.min(index * 0.035, 0.16),
               duration: 0.2,
             }}
-            className="rounded-2xl bg-white p-5 ring-1 ring-slate-200"
+            className="rounded-lg bg-white p-5 shadow-sm shadow-stone-300/50 ring-1 ring-stone-200"
           >
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold">{table.tableName}</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {table.status === "open" ? "Open session" : "Closed session"}
+                <h2 className="text-lg font-semibold">
+                  {translateTableName(language, table.tableName)}
+                </h2>
+                <p className="mt-1 text-sm text-stone-500">
+                  {table.status === "open" ? t("openSession") : t("closedSession")}
                 </p>
               </div>
               <span
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${
                   table.status === "open"
                     ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
-                    : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+                    : "bg-stone-100 text-stone-600 ring-1 ring-stone-200"
                 }`}
               >
                 {table.status}
               </span>
             </div>
-            <p className="mb-4 mt-1 break-all text-sm text-slate-500">{url}</p>
-            <div className="inline-block rounded-2xl bg-white p-3 ring-1 ring-slate-200">
+            <p className="mb-4 mt-1 break-all text-sm text-stone-500">{url}</p>
+            <div className="inline-block rounded-lg bg-white p-3 ring-1 ring-stone-200">
               <QRCodeSVG value={url} size={180} />
             </div>
             <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-xl bg-slate-50 p-3">
-                <dt className="text-slate-500">Open orders</dt>
+              <div className={quietPanelClass}>
+                <dt className="text-stone-500">{t("openOrders")}</dt>
                 <dd className="mt-1 font-semibold">{table.unpaidOrderCount}</dd>
               </div>
-              <div className="rounded-xl bg-slate-50 p-3">
-                <dt className="text-slate-500">Latest order</dt>
+              <div className={quietPanelClass}>
+                <dt className="text-stone-500">{t("latestOrder")}</dt>
                 <dd className="mt-1 font-semibold">
                   {table.latestOrderAt
                     ? new Date(table.latestOrderAt).toLocaleTimeString()
-                    : "None"}
+                    : t("none")}
                 </dd>
               </div>
             </dl>
             {hasUnpaidOrders ? (
-              <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
-                Settle or cancel open orders before closing or resetting this table.
+              <p className="mt-3 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200">
+                {t("settleBeforeReset")}
               </p>
             ) : null}
             <div className="mt-4 grid grid-cols-3 gap-2">
@@ -1029,25 +1144,25 @@ function TablesPanel({
                 type="button"
                 disabled={table.status === "open"}
                 onClick={() => void onOpen(table.tableId)}
-                className="h-10 rounded-lg bg-slate-950 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                className="h-10 rounded-md bg-stone-950 px-3 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
               >
-                Open
+                {t("open")}
               </button>
               <button
                 type="button"
                 disabled={table.status === "closed" || hasUnpaidOrders}
                 onClick={() => void onClose(table.tableId)}
-                className="h-10 rounded-lg bg-slate-100 px-3 text-sm font-semibold text-slate-700 ring-1 ring-slate-200 disabled:cursor-not-allowed disabled:text-slate-400"
+                className="h-10 rounded-md bg-white px-3 text-sm font-semibold text-stone-700 ring-1 ring-stone-200 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:text-stone-400"
               >
-                Close
+                {t("close")}
               </button>
               <button
                 type="button"
                 disabled={hasUnpaidOrders}
                 onClick={() => void onReset(table.tableId)}
-                className="h-10 rounded-lg bg-emerald-700 px-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500"
+                className="h-10 rounded-md bg-emerald-700 px-3 text-sm font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-500"
               >
-                Reset
+                {t("reset")}
               </button>
             </div>
           </motion.article>
@@ -1058,12 +1173,14 @@ function TablesPanel({
 }
 
 function Receipt({ order }: { order: Order }) {
+  const { language, t } = useLanguage();
+
   return (
-    <div className="rounded-xl bg-slate-50 p-4">
+    <div className="rounded-lg bg-stone-50 p-4 ring-1 ring-stone-100">
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <p className="font-semibold">{order.tableName}</p>
-          <p className="text-xs text-slate-500">Receipt preview</p>
+          <p className="font-semibold">{translateTableName(language, order.tableName)}</p>
+          <p className="text-xs text-stone-500">{t("receiptPreview")}</p>
         </div>
         <StatusPill status={order.status} />
       </div>
@@ -1071,19 +1188,20 @@ function Receipt({ order }: { order: Order }) {
         {order.items.map((item) => (
           <div key={item.id} className="flex justify-between gap-4 text-sm">
             <span>
-              {item.quantity}x {item.name}
+              {item.quantity}x{" "}
+              {translateMenuItemSnapshot(language, item.menuItemId, item.name)}
             </span>
             <span className="font-medium">{formatCurrency(item.lineTotalCents)}</span>
           </div>
         ))}
       </div>
-      <div className="mt-4 space-y-1 border-t border-slate-200 pt-3 text-sm">
-        <Line label="Subtotal" value={order.subtotalCents} />
-        <Line label="Service" value={order.serviceCents} />
-        <Line label="Tax" value={order.taxCents} />
-        <Line label="Discount" value={-order.discountCents} />
+      <div className="mt-4 space-y-1 border-t border-stone-200 pt-3 text-sm">
+        <Line label={t("subtotal")} value={order.subtotalCents} />
+        <Line label={t("service")} value={order.serviceCents} />
+        <Line label={t("tax")} value={order.taxCents} />
+        <Line label={t("discount")} value={-order.discountCents} />
         <div className="flex justify-between pt-2 text-base font-semibold">
-          <span>Total</span>
+          <span>{t("total")}</span>
           <span>{formatCurrency(order.totalCents)}</span>
         </div>
       </div>
@@ -1094,7 +1212,7 @@ function Receipt({ order }: { order: Order }) {
 function Line({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex justify-between">
-      <span className="text-slate-500">{label}</span>
+      <span className="text-stone-500">{label}</span>
       <span>{formatCurrency(value)}</span>
     </div>
   );
@@ -1115,13 +1233,13 @@ function Field({
 }) {
   return (
     <label className="mb-3 block">
-      <span className="mb-1 block text-sm font-medium">{label}</span>
+      <span className="mb-1 block text-sm font-semibold text-stone-700">{label}</span>
       <input
         defaultValue={defaultValue}
         name={name}
         type={type}
         step={step}
-        className="h-11 w-full rounded-lg border border-slate-300 px-3 text-base outline-none focus:border-slate-950"
+        className={`${inputClass} text-base`}
       />
     </label>
   );
