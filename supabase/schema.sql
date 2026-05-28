@@ -195,7 +195,7 @@ do $$ begin
 end $$;
 
 insert into restaurants (id, name, slug, service_rate, tax_rate)
-values ('00000000-0000-0000-0000-000000000001', 'MenuMaster Pub & Bar', 'menumaster-pub-bar', 0.1, 0.07)
+values ('00000000-0000-0000-0000-000000000001', 'MenuMaster Yangon Restaurant', 'menumaster-yangon-restaurant', 0.1, 0.07)
 on conflict (id) do update set
   name = excluded.name,
   slug = excluded.slug,
@@ -234,19 +234,19 @@ on conflict (id) do update set
 
 insert into menu_items (id, restaurant_id, category_id, name, description, price_cents, image_url, is_available, sort_order)
 values
-  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000201', 'Buffalo Wings', 'Crispy wings tossed in buffalo sauce with ranch dip.', 890, 'https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=900&q=80', true, 1),
-  ('00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'House Burger', 'Beef patty, cheddar, pickles, lettuce, tomato, and pub sauce.', 1290, 'https://images.unsplash.com/photo-1559314809-0d155014e29e?auto=format&fit=crop&w=900&q=80', true, 1),
-  ('00000000-0000-0000-0000-000000000303', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'Loaded Fries', 'Fries with cheese sauce, bacon, scallions, and sour cream.', 990, 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=900&q=80', false, 2),
-  ('00000000-0000-0000-0000-000000000304', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000203', 'House Lager', 'Crisp draft lager served cold.', 450, 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?auto=format&fit=crop&w=900&q=80', true, 1),
-  ('00000000-0000-0000-0000-000000000305', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000201', 'Loaded Nachos', 'Tortilla chips, cheddar, salsa, jalapenos, sour cream, and guacamole.', 760, 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=900&q=80', true, 2),
-  ('00000000-0000-0000-0000-000000000306', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000201', 'Mozzarella Sticks', 'Golden mozzarella sticks with warm marinara sauce.', 780, 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=900&q=80', true, 3),
-  ('00000000-0000-0000-0000-000000000307', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'Fish and Chips', 'Beer-battered fish with fries, tartar sauce, and lemon.', 1350, 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=900&q=80', true, 3),
-  ('00000000-0000-0000-0000-000000000308', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'Grilled Salmon', 'Charred salmon with herb potatoes, greens, and lemon butter.', 1790, 'https://images.unsplash.com/photo-1559737558-2f5a35f4523b?auto=format&fit=crop&w=900&q=80', true, 4),
-  ('00000000-0000-0000-0000-000000000309', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'Ribeye Steak', 'Seared ribeye with roasted vegetables and pepper sauce.', 2450, 'https://images.unsplash.com/photo-1558030006-450675393462?auto=format&fit=crop&w=900&q=80', true, 5),
-  ('00000000-0000-0000-0000-000000000310', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000203', 'Cold Brew Coffee', 'Slow-steeped coffee served over ice.', 520, 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=900&q=80', true, 2),
-  ('00000000-0000-0000-0000-000000000311', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000203', 'Gin and Tonic', 'House gin, tonic, lime, and ice.', 790, 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?auto=format&fit=crop&w=900&q=80', true, 3),
-  ('00000000-0000-0000-0000-000000000312', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000204', 'Sticky Toffee Pudding', 'Warm date sponge with toffee sauce and vanilla ice cream.', 690, 'https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=900&q=80', true, 1),
-  ('00000000-0000-0000-0000-000000000313', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000204', 'Chocolate Brownie', 'Warm brownie with chocolate sauce and whipped cream.', 640, 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=900&q=80', true, 2)
+  ('00000000-0000-0000-0000-000000000301', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000201', 'Buffalo Wings', 'Crispy wings tossed in buffalo sauce with ranch dip.', 8900, 'https://images.unsplash.com/photo-1559847844-5315695dadae?auto=format&fit=crop&w=900&q=80', true, 1),
+  ('00000000-0000-0000-0000-000000000302', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'House Burger', 'Beef patty, cheddar, pickles, lettuce, tomato, and pub sauce.', 12900, 'https://images.unsplash.com/photo-1559314809-0d155014e29e?auto=format&fit=crop&w=900&q=80', true, 1),
+  ('00000000-0000-0000-0000-000000000303', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'Loaded Fries', 'Fries with cheese sauce, bacon, scallions, and sour cream.', 9900, 'https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=900&q=80', false, 2),
+  ('00000000-0000-0000-0000-000000000304', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000203', 'House Lager', 'Crisp draft lager served cold.', 4500, 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?auto=format&fit=crop&w=900&q=80', true, 1),
+  ('00000000-0000-0000-0000-000000000305', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000201', 'Loaded Nachos', 'Tortilla chips, cheddar, salsa, jalapenos, sour cream, and guacamole.', 7600, 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?auto=format&fit=crop&w=900&q=80', true, 2),
+  ('00000000-0000-0000-0000-000000000306', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000201', 'Mozzarella Sticks', 'Golden mozzarella sticks with warm marinara sauce.', 7800, 'https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=900&q=80', true, 3),
+  ('00000000-0000-0000-0000-000000000307', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'Fish and Chips', 'Beer-battered fish with fries, tartar sauce, and lemon.', 13500, 'https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=900&q=80', true, 3),
+  ('00000000-0000-0000-0000-000000000308', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'Grilled Salmon', 'Charred salmon with herb potatoes, greens, and lemon butter.', 17900, 'https://images.unsplash.com/photo-1559737558-2f5a35f4523b?auto=format&fit=crop&w=900&q=80', true, 4),
+  ('00000000-0000-0000-0000-000000000309', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000202', 'Ribeye Steak', 'Seared ribeye with roasted vegetables and pepper sauce.', 24500, 'https://images.unsplash.com/photo-1558030006-450675393462?auto=format&fit=crop&w=900&q=80', true, 5),
+  ('00000000-0000-0000-0000-000000000310', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000203', 'Cold Brew Coffee', 'Slow-steeped coffee served over ice.', 5200, 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=900&q=80', true, 2),
+  ('00000000-0000-0000-0000-000000000311', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000203', 'Gin and Tonic', 'House gin, tonic, lime, and ice.', 7900, 'https://images.unsplash.com/photo-1564890369478-c89ca6d9cde9?auto=format&fit=crop&w=900&q=80', true, 3),
+  ('00000000-0000-0000-0000-000000000312', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000204', 'Sticky Toffee Pudding', 'Warm date sponge with toffee sauce and vanilla ice cream.', 6900, 'https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=900&q=80', true, 1),
+  ('00000000-0000-0000-0000-000000000313', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000204', 'Chocolate Brownie', 'Warm brownie with chocolate sauce and whipped cream.', 6400, 'https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=900&q=80', true, 2)
 on conflict (id) do update set
   name = excluded.name,
   description = excluded.description,
@@ -257,19 +257,19 @@ on conflict (id) do update set
 
 insert into menu_item_options (id, menu_item_id, name, price_delta_cents)
 values
-  ('00000000-0000-0000-0000-000000000401', '00000000-0000-0000-0000-000000000301', 'Extra ranch', 120),
-  ('00000000-0000-0000-0000-000000000402', '00000000-0000-0000-0000-000000000302', 'Add bacon', 180),
-  ('00000000-0000-0000-0000-000000000403', '00000000-0000-0000-0000-000000000302', 'Double patty', 350),
-  ('00000000-0000-0000-0000-000000000404', '00000000-0000-0000-0000-000000000303', 'Extra bacon', 180),
+  ('00000000-0000-0000-0000-000000000401', '00000000-0000-0000-0000-000000000301', 'Extra ranch', 1200),
+  ('00000000-0000-0000-0000-000000000402', '00000000-0000-0000-0000-000000000302', 'Add bacon', 1800),
+  ('00000000-0000-0000-0000-000000000403', '00000000-0000-0000-0000-000000000302', 'Double patty', 3500),
+  ('00000000-0000-0000-0000-000000000404', '00000000-0000-0000-0000-000000000303', 'Extra bacon', 1800),
   ('00000000-0000-0000-0000-000000000405', '00000000-0000-0000-0000-000000000304', 'Pint', 0),
   ('00000000-0000-0000-0000-000000000406', '00000000-0000-0000-0000-000000000305', 'No jalapenos', 0),
   ('00000000-0000-0000-0000-000000000407', '00000000-0000-0000-0000-000000000305', 'Extra jalapenos', 0),
-  ('00000000-0000-0000-0000-000000000408', '00000000-0000-0000-0000-000000000306', 'Extra marinara', 80),
-  ('00000000-0000-0000-0000-000000000409', '00000000-0000-0000-0000-000000000307', 'Extra tartar', 90),
-  ('00000000-0000-0000-0000-000000000410', '00000000-0000-0000-0000-000000000308', 'Extra lemon butter', 90),
-  ('00000000-0000-0000-0000-000000000411', '00000000-0000-0000-0000-000000000309', 'Add fries', 220),
-  ('00000000-0000-0000-0000-000000000412', '00000000-0000-0000-0000-000000000310', 'Oat milk', 80),
-  ('00000000-0000-0000-0000-000000000413', '00000000-0000-0000-0000-000000000312', 'Extra ice cream', 180)
+  ('00000000-0000-0000-0000-000000000408', '00000000-0000-0000-0000-000000000306', 'Extra marinara', 800),
+  ('00000000-0000-0000-0000-000000000409', '00000000-0000-0000-0000-000000000307', 'Extra tartar', 900),
+  ('00000000-0000-0000-0000-000000000410', '00000000-0000-0000-0000-000000000308', 'Extra lemon butter', 900),
+  ('00000000-0000-0000-0000-000000000411', '00000000-0000-0000-0000-000000000309', 'Add fries', 2200),
+  ('00000000-0000-0000-0000-000000000412', '00000000-0000-0000-0000-000000000310', 'Oat milk', 800),
+  ('00000000-0000-0000-0000-000000000413', '00000000-0000-0000-0000-000000000312', 'Extra ice cream', 1800)
 on conflict (id) do update set
   name = excluded.name,
   price_delta_cents = excluded.price_delta_cents;

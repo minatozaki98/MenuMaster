@@ -52,6 +52,13 @@ function rowValue(row: SupabaseRow, snakeKey: string, camelKey = snakeKey) {
   return row[camelKey] ?? row[snakeKey];
 }
 
+function normalizeSeedKyatAmount(id: string, amount: number, kind: "item" | "option") {
+  const isSeedId = id.startsWith("00000000-0000-0000-0000-000000000");
+  const legacyLimit = kind === "item" ? 3000 : 500;
+
+  return isSeedId && amount > 0 && amount < legacyLimit ? amount * 10 : amount;
+}
+
 function cloneDemoState(): MenuMasterState {
   return JSON.parse(JSON.stringify(demoState)) as MenuMasterState;
 }
@@ -98,11 +105,16 @@ function emptyCustomerState(): MenuMasterState {
 }
 
 function mapMenuOption(row: SupabaseRow) {
+  const id = String(row.id);
+  const priceDeltaCents = Number(
+    rowValue(row, "price_delta_cents", "priceDeltaCents") ?? 0,
+  );
+
   return {
-    id: String(row.id),
+    id,
     menuItemId: String(rowValue(row, "menu_item_id", "menuItemId")),
     name: String(row.name),
-    priceDeltaCents: Number(rowValue(row, "price_delta_cents", "priceDeltaCents") ?? 0),
+    priceDeltaCents: normalizeSeedKyatAmount(id, priceDeltaCents, "option"),
   };
 }
 
@@ -122,7 +134,11 @@ function mapMenuItem(row: SupabaseRow, options: SupabaseRow[]): MenuItem {
     categoryId: String(rowValue(row, "category_id", "categoryId")),
     name: String(row.name),
     description: String(row.description ?? ""),
-    priceCents: Number(rowValue(row, "price_cents", "priceCents")),
+    priceCents: normalizeSeedKyatAmount(
+      String(row.id),
+      Number(rowValue(row, "price_cents", "priceCents")),
+      "item",
+    ),
     imageUrl: String(rowValue(row, "image_url", "imageUrl") ?? ""),
     isAvailable: Boolean(rowValue(row, "is_available", "isAvailable")),
     sortOrder: Number(rowValue(row, "sort_order", "sortOrder") ?? 0),
